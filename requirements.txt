@@ -1,0 +1,16 @@
+# Streamlit UI
+streamlit==1.31.0
+
+# Data handling
+pandas==2.2.0
+openpyxl==3.1.2
+
+# Database
+sqlalchemy==2.0.25
+
+# Document parsing
+pdfplumber==0.10.4
+requests==2.31.0
+
+# Export
+xlsxwriter==3.1.9
