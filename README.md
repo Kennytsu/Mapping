@@ -4,12 +4,28 @@ Maps controls between ISO 27001, BSI IT-Grundschutz, and C5 compliance framework
 
 ## Quick Start
 
+### Option 1: Run with Python
+
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+python app.py
 ```
 
-App runs at `http://localhost:8501`
+App runs at **http://localhost:5000**
+
+### Option 2: Run with Podman
+
+```bash
+# Build the image
+podman build -t compliance-mapping .
+
+# Run the container
+podman run -d -p 5000:5000 --name compliance-app compliance-mapping
+```
+
+App runs at **http://localhost:5000**
+
+To stop: `podman stop compliance-app`
 
 ---
 
@@ -27,12 +43,29 @@ Upload BSI mapping PDFs or Excel files to import new controls and mappings.
 
 ```
 Mapping/
-├── app.py              # Streamlit UI
+├── app.py              # Flask backend API
 ├── database.py         # SQLite operations
 ├── document_parser.py  # PDF/Excel parsing
+├── static/
+│   ├── index.html      # Frontend HTML
+│   ├── style.css       # Styles
+│   └── app.js          # Frontend JavaScript
+├── Containerfile       # Podman container definition
 ├── compliance.db       # Database (auto-created)
-└── requirements.txt    # Dependencies
+└── requirements.txt    # Python dependencies
 ```
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/frameworks` | List all frameworks |
+| GET | `/api/controls?q=search` | Search controls |
+| GET | `/api/mappings/{control_id}` | Get mappings for a control |
+| POST | `/api/upload` | Upload and parse a document |
+| POST | `/api/import` | Import parsed data to database |
 
 ---
 
@@ -114,7 +147,7 @@ bsi_req_pattern = re.compile(r'\b([A-Z]{2,5}\.\d+(?:\.\d+)?\.A\d+)\b')
                │
                ▼
 ┌─────────────────────────────────────┐
-│        Streamlit UI                 │
+│     Flask API + HTML/JS UI          │
 │  - Search controls                  │
 │  - View cross-framework mappings    │
 └─────────────────────────────────────┘

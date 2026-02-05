@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compliance Mapping Tool</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Compliance Framework Mapping Tool</h1>
+            <p class="subtitle">Map controls between ISO 27001, BSI IT-Grundschutz, and C5</p>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab active" data-tab="lookup">Control Lookup</button>
+            <button class="tab" data-tab="upload">Upload Documents</button>
+        </nav>
+
+        <!-- Control Lookup Tab -->
+        <section id="lookup" class="tab-content active">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search by Control ID or keyword (e.g., A.5.1 or access control)">
+                <select id="framework-filter">
+                    <option value="">All Frameworks</option>
+                </select>
+                <button id="search-btn">Search</button>
+            </div>
+
+            <div id="search-results" class="results"></div>
+            <div id="mapping-results" class="mappings"></div>
+        </section>
+
+        <!-- Upload Tab -->
+        <section id="upload" class="tab-content">
+            <div class="upload-section">
+                <h2>Upload Compliance Documents</h2>
+                <p>Upload BSI mapping documents (PDF or Excel) to add new controls and mappings.</p>
+
+                <div class="form-group">
+                    <label for="doc-type">Document Type</label>
+                    <select id="doc-type">
+                        <option value="BSI Zuordnungstabelle">BSI Zuordnungstabelle (ISO to BSI mapping)</option>
+                        <option value="C5 Cross-Reference">C5 Cross-Reference Table (ISO to C5 mapping)</option>
+                        <option value="Custom">Custom Mapping Table</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="file-input">Upload Document</label>
+                    <div class="file-drop" id="file-drop">
+                        <input type="file" id="file-input" accept=".pdf,.xlsx,.xls,.csv">
+                        <p>Drag and drop or click to select<br><small>PDF, Excel, CSV</small></p>
+                    </div>
+                    <div id="file-name"></div>
+                </div>
+
+                <button id="parse-btn" class="btn-primary" disabled>Parse Document</button>
+
+                <div id="parse-results" class="parse-results hidden">
+                    <h3>Extracted Data</h3>
+                    <div class="results-grid">
+                        <div class="result-col">
+                            <h4>Controls <span id="control-count"></span></h4>
+                            <div id="controls-table" class="data-table"></div>
+                        </div>
+                        <div class="result-col">
+                            <h4>Mappings <span id="mapping-count"></span></h4>
+                            <div id="mappings-table" class="data-table"></div>
+                        </div>
+                    </div>
+                    <button id="import-btn" class="btn-primary">Import to Database</button>
+                </div>
+
+                <div id="import-status" class="status hidden"></div>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
