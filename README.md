@@ -1,6 +1,6 @@
 # Compliance Mapping Tool
 
-Maps controls between ISO 27001, BSI IT-Grundschutz, and C5 compliance frameworks.
+Maps controls between ISO 27001, old/ new BSI IT-Grundschutz, and C5 compliance frameworks.
 
 ## Quick Start
 
