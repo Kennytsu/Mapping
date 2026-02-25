@@ -117,12 +117,6 @@ podman exec compliance-app python seed_data.py \
 - **UI**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 
-### Run tests
-
-```bash
-python test_mappings.py
-```
-
 ## API Endpoints
 
 | Method | Path | Description |
