@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py database.py document_parser.py seed_data.py test_mappings.py ./
+COPY app.py database.py document_parser.py seed_data.py ./
 COPY static/ ./static/
 
 ENV PYTHONUNBUFFERED=1
