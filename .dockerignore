@@ -4,4 +4,7 @@ __pycache__
 *.db
 .git
 .gitignore
+.cursor
 *.md
+data/
+.env

@@ -1,163 +1,142 @@
-# Compliance Mapping Tool .
+# Compliance Framework Mapping Tool
 
-Maps controls between ISO 27001, old/ new BSI IT-Grundschutz, and C5 compliance frameworks.
+Map controls between **ISO 27001:2022**, **BSI IT-Grundschutz**, and **C5:2020** using official mapping documents. Built for IBM as a lookup-table tool that clusters multiple requirement sources to ease compliance implementation.
 
-## Quick Start
+## Architecture
 
-### Option 1: Run with Python
+```mermaid
+flowchart TB
+    subgraph podman [Podman Compose]
+        subgraph app [App Container - Python 3.11]
+            FastAPI[FastAPI Backend]
+            Parsers[Document Parsers]
+            Static[Vanilla HTML/CSS/JS Frontend]
+        end
+        subgraph db [PostgreSQL 16]
+            PG[(PostgreSQL)]
+        end
+    end
 
-```bash
-pip install -r requirements.txt
-python app.py
+    Browser[Browser :8000] --> FastAPI
+    FastAPI --> Static
+    FastAPI --> PG
+    Parsers --> PG
+    BSI_PDF[BSI Zuordnungstabelle PDF] --> Parsers
+    C5_Excel[C5 Reference Tables Excel] --> Parsers
 ```
-
-App runs at **http://localhost:5000**
-
-### Option 2: Run with Podman
-
-```bash
-# Build the image
-podman build -t compliance-mapping .
-
-# Run the container
-podman run -d -p 5000:5000 --name compliance-app compliance-mapping
-```
-
-App runs at **http://localhost:5000**
-
-To stop: `podman stop compliance-app`
-
----
 
 ## Features
 
-### 1. Control Lookup
-Search any control ID (e.g., `A.5.1`) to see equivalent controls in other frameworks.
+| Feature | Description |
+|---------|-------------|
+| **Control Lookup** | Search any control ID or keyword, view bidirectional mappings across all frameworks. Click a mapped control to drill into its own mappings. |
+| **Coverage Analysis** | Compare two frameworks: coverage percentage, gap list, unmapped controls, full mapping table. |
+| **Version Tracking** | Track changes between framework versions (added, modified, renamed, removed controls). |
+| **Document Upload** | Upload new mapping documents (PDF, Excel, CSV) with explicit source/target framework and year selection. |
+| **BSI-Standard Refs** | Parses both IT-Grundschutz requirement IDs (e.g. `ISMS.1.A3`) and BSI-Standard document references (e.g. `BSI-Standard 200-2, Kapitel 9`). |
+| **API Docs** | Auto-generated Swagger UI at `/docs`. |
 
-### 2. Upload Documents
-Upload BSI mapping PDFs or Excel files to import new controls and mappings.
+## Data Sources
 
----
+| Document | Format | Content |
+|----------|--------|---------|
+| BSI Zuordnungstabelle (Edition 6, 2022) | PDF | ISO 27001:2022 clauses + Annex A mapped to BSI IT-Grundschutz modules and BSI-Standards |
+| C5:2020 Reference Tables | Excel | 121 C5 criteria mapped to ISO 27001:2022 clauses and Annex A controls |
+
+## Seeded Data
+
+- **3 Frameworks**: ISO 27001:2022 (105 controls), BSI IT-Grundschutz Edition 6 (407 controls), C5:2020 (121 controls)
+- **666 Official Mappings** from the two source documents
+- ISO 27001 clause titles (4.1-10.2) with real names
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | FastAPI, SQLAlchemy (async), Pydantic |
+| Database | PostgreSQL 16 (pgvector-ready for future AI module) |
+| Frontend | Vanilla HTML/CSS/JS, IBM Plex Sans/Mono |
+| Containerization | Podman + podman-compose |
+| PDF Parsing | pdfplumber |
+| Excel Parsing | pandas + openpyxl |
+| Migrations | Alembic (configured) |
+
+## Database Schema
+
+```sql
+frameworks   (id, name, short_name, version, description, is_active)
+controls     (id, framework_id, control_id, title, description, category, UNIQUE(framework_id, control_id))
+mappings     (id, source_control_id, target_control_id, confidence, source_type, source_document, notes)
+version_changes (id, framework_id, old_version, new_version, change_type, old_control_id, new_control_id, description)
+```
 
 ## Project Structure
 
 ```
-Mapping/
-├── app.py              # Flask backend API
-├── database.py         # SQLite operations
-├── document_parser.py  # PDF/Excel parsing
+├── app.py                  # FastAPI application (routes, schemas)
+├── database.py             # SQLAlchemy models, async/sync engines
+├── document_parser.py      # BSI PDF + C5 Excel + CSV parsers
+├── seed_data.py            # CLI to seed frameworks, controls, mappings
+├── test_mappings.py        # Automated mapping validation (25 checks)
+├── podman-compose.yml      # PostgreSQL 16 + app containers
+├── Dockerfile              # Python 3.11-slim, uvicorn
+├── requirements.txt        # Python dependencies
 ├── static/
-│   ├── index.html      # Frontend HTML
-│   ├── style.css       # Styles
-│   └── app.js          # Frontend JavaScript
-├── Containerfile       # Podman container definition
-├── compliance.db       # Database (auto-created)
-└── requirements.txt    # Python dependencies
+│   ├── index.html          # Single-page app shell
+│   ├── style.css           # IBM Carbon-inspired design
+│   └── app.js              # Client-side logic
+└── data/                   # Mount point for source documents (not committed)
+    ├── Zuordnung_ISO_und_IT_Grundschutz_Edit_6.pdf
+    └── C5_2020_Reference_Tables_ISO27001.xlsx
 ```
 
----
+## Quick Start
+
+### Prerequisites
+
+- [Podman](https://podman.io/) with podman-compose
+- BSI PDF and C5 Excel in the `data/` folder
+
+### Start
+
+```bash
+podman machine start
+podman-compose -f podman-compose.yml up -d
+```
+
+### Seed the database
+
+```bash
+podman exec compliance-app python seed_data.py \
+  --bsi /app/data/Zuordnung_ISO_und_IT_Grundschutz_Edit_6.pdf \
+  --c5  /app/data/C5_2020_Reference_Tables_ISO27001.xlsx
+```
+
+### Access
+
+- **UI**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+
+### Run tests
+
+```bash
+python test_mappings.py
+```
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/frameworks` | List all frameworks |
-| GET | `/api/controls?q=search` | Search controls |
-| GET | `/api/mappings/{control_id}` | Get mappings for a control |
-| POST | `/api/upload` | Upload and parse a document |
-| POST | `/api/import` | Import parsed data to database |
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/frameworks` | List all frameworks with control counts |
+| GET | `/api/controls?q=&framework_id=` | Search controls by ID or keyword |
+| GET | `/api/mappings/{control_id}?framework_id=` | Bidirectional mappings for a control |
+| GET | `/api/coverage?source=&target=` | Coverage stats between two frameworks |
+| GET | `/api/coverage/table?source=&target=` | Full mapping table for export |
+| GET | `/api/versions/{fw}/transitions` | Available version transitions |
+| GET | `/api/versions/{fw}/changes?from=&to=` | Version change details |
+| POST | `/api/upload` | Parse a document (returns preview) |
+| POST | `/api/import` | Import parsed controls and mappings |
 
----
+## Future: AI Suggestions (Phase 4)
 
-## How the PDF Parsing Works
-
-The BSI Zuordnungstabelle PDF has a two-column structure with ISO controls on the left and BSI controls on the right:
-
-```
-A.5.1 Policies for information security
-    ISMS.1.A3 Erstellung einer Leitlinie zur Informationssicherheit
-    ORP.1.A1 Festlegung von Verantwortlichkeiten
-    ISMS.1.A1 Übernahme der Gesamtverantwortung
-A.5.2 Information security roles...
-    ISMS.1.A4 Benennung eines Informationssicherheitsbeauftragten
-```
-
-### Parsing Steps
-
-**Step 1: Extract text from PDF**
-
-Uses `pdfplumber` to extract all text from each page:
-
-```python
-with pdfplumber.open(pdf_file) as pdf:
-    for page in pdf.pages:
-        text = page.extract_text()
-```
-
-**Step 2: Detect ISO controls using regex**
-
-Matches patterns like `A.5.1`, `A.8.12`:
-
-```python
-iso_pattern = re.compile(r'A\.(\d+)\.(\d+)')
-```
-
-**Step 3: Detect BSI controls using regex**
-
-Matches patterns like `ISMS.1.A3`, `ORP.4.A2`, `NET.1.1.A5`:
-
-```python
-bsi_req_pattern = re.compile(r'\b([A-Z]{2,5}\.\d+(?:\.\d+)?\.A\d+)\b')
-```
-
-**Step 4: Associate BSI controls with current ISO control**
-
-- When parser sees `A.5.1`, it sets `current_iso = "A.5.1"`
-- Every BSI control found until the next ISO control gets mapped to it
-- Result: `A.5.1 → ISMS.1.A3`, `A.5.1 → ORP.1.A1`, etc.
-
-**Step 5: Deduplicate**
-
-- Uses `seen_mappings` set to avoid duplicate mappings
-- Uses `seen_bsi` set to avoid duplicate controls
-
-### Data Flow
-
-```
-┌─────────────────────────────────────┐
-│     BSI PDF / Excel Upload          │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│        Document Parser              │
-│  - pdfplumber extracts text         │
-│  - Regex finds ISO controls (A.X.Y) │
-│  - Regex finds BSI controls         │
-│  - Creates control-to-control maps  │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│        SQLite Database              │
-│  - frameworks table                 │
-│  - controls table                   │
-│  - mappings table                   │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│     Flask API + HTML/JS UI          │
-│  - Search controls                  │
-│  - View cross-framework mappings    │
-└─────────────────────────────────────┘
-```
-
----
-
-## Data Sources
-
-- [BSI Zuordnungstabelle (ISO to IT-Grundschutz)](https://www.bsi.bund.de/SharedDocs/Downloads/DE/BSI/Grundschutz/IT-GS-Kompendium/Zuordnung_ISO_und_IT_Grundschutz_Edit_6.pdf)
-- [C5 Cross-Reference Tables](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/CloudComputing/ComplianceControlsCatalogue/2020/C5_2020_Reference_Tables_ISO27001.html)
-
-When BSI releases new editions, upload the new PDFs to update mappings.
+The database is pgvector-ready for a colleague's AI module based on the paper [Towards Automated Regulation Analysis for Effective Privacy Compliance](https://www.ndss-symposium.org/wp-content/uploads/2024-650-paper.pdf). AI-suggested mappings will be stored with `source_type='ai_suggested'` and a confidence score, displayed separately from official mappings in the UI.

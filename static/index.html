@@ -4,80 +4,247 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Compliance Mapping Tool</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Compliance Framework Mapping Tool</h1>
-            <p class="subtitle">Map controls between ISO 27001, BSI IT-Grundschutz, and C5</p>
-        </header>
+    <header class="top-bar">
+        <div class="top-bar-inner">
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>Compliance Mapping</h1>
+                    <p>ISO 27001 &middot; BSI IT-Grundschutz &middot; C5</p>
+                </div>
+            </div>
+            <div class="top-bar-meta">
+                <span class="meta-chip" id="fw-count-chip">0 Frameworks</span>
+                <a href="/docs" target="_blank" class="meta-chip meta-link">API Docs</a>
+            </div>
+        </div>
+    </header>
 
-        <nav class="tabs">
-            <button class="tab active" data-tab="lookup">Control Lookup</button>
-            <button class="tab" data-tab="upload">Upload Documents</button>
+    <div class="shell">
+        <nav class="tabs" role="tablist">
+            <button class="tab active" data-tab="lookup" role="tab">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+                Control Lookup
+            </button>
+            <button class="tab" data-tab="coverage" role="tab">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                Coverage
+            </button>
+            <button class="tab" data-tab="versions" role="tab">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
+                Versions
+            </button>
+            <button class="tab" data-tab="upload" role="tab">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"/></svg>
+                Upload
+            </button>
         </nav>
 
-        <!-- Control Lookup Tab -->
-        <section id="lookup" class="tab-content active">
-            <div class="search-box">
-                <input type="text" id="search-input" placeholder="Search by Control ID or keyword (e.g., A.5.1 or access control)">
-                <select id="framework-filter">
-                    <option value="">All Frameworks</option>
-                </select>
-                <button id="search-btn">Search</button>
-            </div>
-
-            <div id="search-results" class="results"></div>
-            <div id="mapping-results" class="mappings"></div>
-        </section>
-
-        <!-- Upload Tab -->
-        <section id="upload" class="tab-content">
-            <div class="upload-section">
-                <h2>Upload Compliance Documents</h2>
-                <p>Upload BSI mapping documents (PDF or Excel) to add new controls and mappings.</p>
-
-                <div class="form-group">
-                    <label for="doc-type">Document Type</label>
-                    <select id="doc-type">
-                        <option value="BSI Zuordnungstabelle">BSI Zuordnungstabelle (ISO to BSI mapping)</option>
-                        <option value="C5 Cross-Reference">C5 Cross-Reference Table (ISO to C5 mapping)</option>
-                        <option value="Custom">Custom Mapping Table</option>
-                    </select>
+        <main class="content">
+            <!-- Control Lookup -->
+            <section id="lookup" class="tab-panel active">
+                <div class="panel-header">
+                    <h2>Control Lookup</h2>
+                    <p>Search controls across all frameworks and explore their mappings.</p>
                 </div>
 
-                <div class="form-group">
-                    <label for="file-input">Upload Document</label>
-                    <div class="file-drop" id="file-drop">
-                        <input type="file" id="file-input" accept=".pdf,.xlsx,.xls,.csv">
-                        <p>Drag and drop or click to select<br><small>PDF, Excel, CSV</small></p>
+                <div class="search-bar">
+                    <div class="search-field">
+                        <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+                        <input type="text" id="search-input" placeholder="Search by Control ID or keyword (e.g. A.5.1, access control, OIS-01)">
+                        <button id="clear-btn" class="clear-btn" title="Clear">&times;</button>
                     </div>
-                    <div id="file-name"></div>
+                    <select id="framework-filter">
+                        <option value="">All Frameworks</option>
+                    </select>
+                    <button id="search-btn" class="btn-primary">Search</button>
                 </div>
 
-                <button id="parse-btn" class="btn-primary" disabled>Parse Document</button>
+                <div class="lookup-grid">
+                    <div class="lookup-col" id="results-col">
+                        <div id="search-results" class="results">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="20" cy="20" r="14"/><path d="M30 30l12 12" stroke-linecap="round"/></svg>
+                                <p>Search for a control to get started.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="lookup-col" id="mappings-col">
+                        <div id="mapping-results" class="mappings">
+                            <div class="empty-state">
+                                <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h36M6 24h24M6 36h30" stroke-linecap="round"/></svg>
+                                <p>Select a control to view its mappings.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Coverage Analysis -->
+            <section id="coverage" class="tab-panel">
+                <div class="panel-header">
+                    <h2>Coverage Analysis</h2>
+                    <p>Compare two frameworks to see mapping coverage and identify gaps.</p>
+                </div>
+
+                <div class="controls-row">
+                    <div class="field">
+                        <label for="source-fw">Source Framework</label>
+                        <select id="source-fw"></select>
+                    </div>
+                    <span class="arrow-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    </span>
+                    <div class="field">
+                        <label for="target-fw">Target Framework</label>
+                        <select id="target-fw"></select>
+                    </div>
+                    <button id="analyze-btn" class="btn-primary">Analyze Coverage</button>
+                </div>
+
+                <div id="coverage-results" class="hidden">
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-value" id="stat-total">-</div><div class="stat-label">Source Controls</div></div>
+                        <div class="stat-card accent-green"><div class="stat-value" id="stat-mapped">-</div><div class="stat-label">Mapped</div></div>
+                        <div class="stat-card accent-amber"><div class="stat-value" id="stat-unmapped">-</div><div class="stat-label">Gaps</div></div>
+                        <div class="stat-card accent-blue"><div class="stat-value" id="stat-percent">-</div><div class="stat-label">Coverage</div></div>
+                    </div>
+                    <div class="progress-track"><div class="progress-fill" id="coverage-bar"></div></div>
+                    <div class="two-col">
+                        <div class="card">
+                            <h3>Unmapped Source Controls <span id="unmapped-count" class="count-badge"></span></h3>
+                            <div id="unmapped-list" class="scroll-list"></div>
+                        </div>
+                        <div class="card">
+                            <h3>Target Gaps <span id="gap-count" class="count-badge"></span></h3>
+                            <div id="gap-list" class="scroll-list"></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Full Mapping Table</h3>
+                        <div id="mapping-table-container" class="table-wrap"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Version Tracking -->
+            <section id="versions" class="tab-panel">
+                <div class="panel-header">
+                    <h2>Version Tracking</h2>
+                    <p>Track changes between framework versions to ease migration.</p>
+                </div>
+
+                <div class="controls-row">
+                    <div class="field">
+                        <label for="version-fw">Framework</label>
+                        <select id="version-fw"></select>
+                    </div>
+                    <div class="field">
+                        <label for="version-transition">Version Transition</label>
+                        <select id="version-transition"><option value="">Select framework first</option></select>
+                    </div>
+                    <button id="version-btn" class="btn-primary">Show Changes</button>
+                </div>
+
+                <div id="version-results" class="hidden">
+                    <div class="stats-grid">
+                        <div class="stat-card accent-green"><div class="stat-value" id="stat-added">0</div><div class="stat-label">Added</div></div>
+                        <div class="stat-card accent-blue"><div class="stat-value" id="stat-modified">0</div><div class="stat-label">Modified</div></div>
+                        <div class="stat-card accent-amber"><div class="stat-value" id="stat-renamed">0</div><div class="stat-label">Renamed</div></div>
+                        <div class="stat-card accent-red"><div class="stat-value" id="stat-removed">0</div><div class="stat-label">Removed</div></div>
+                    </div>
+                    <div id="version-changes-list" class="changes-list"></div>
+                </div>
+
+                <div id="version-empty" class="empty-state">
+                    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="4" width="32" height="40" rx="2"/><path d="M16 14h16M16 22h10M16 30h14" stroke-linecap="round"/></svg>
+                    <p>No version change data available yet.<br>Upload BSI Kompendium change documents or add changes via the API.</p>
+                </div>
+            </section>
+
+            <!-- Upload -->
+            <section id="upload" class="tab-panel">
+                <div class="panel-header">
+                    <h2>Upload Documents</h2>
+                    <p>Upload compliance mapping documents to add new controls and mappings to the database.</p>
+                </div>
+
+                <div class="upload-layout">
+                    <div class="card upload-config">
+                        <h3>1. Configure Mapping</h3>
+                        <div class="upload-form-grid">
+                            <div class="field">
+                                <label for="upload-source-fw">Source Framework</label>
+                                <select id="upload-source-fw"></select>
+                                <small class="field-hint">Controls in the "source" column (e.g. ISO 27001)</small>
+                            </div>
+                            <div class="field">
+                                <label for="upload-target-fw">Target Framework</label>
+                                <select id="upload-target-fw"></select>
+                                <small class="field-hint">Controls being mapped to (e.g. BSI, C5)</small>
+                            </div>
+                            <div class="field">
+                                <label for="doc-year">Document Year</label>
+                                <input type="text" id="doc-year" placeholder="e.g. 2022" maxlength="10">
+                                <small class="field-hint">Year or version of the mapping document</small>
+                            </div>
+                            <div class="field">
+                                <label for="doc-type">Document Format</label>
+                                <select id="doc-type">
+                                    <option value="BSI Zuordnungstabelle">BSI Zuordnungstabelle (PDF)</option>
+                                    <option value="C5 Cross-Reference">C5 Cross-Reference Table (Excel)</option>
+                                    <option value="Custom">Generic / Custom (CSV or Excel)</option>
+                                </select>
+                                <small class="field-hint">Determines how the file is parsed</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card upload-file-card">
+                        <h3>2. Upload File</h3>
+                        <div class="file-drop" id="file-drop">
+                            <input type="file" id="file-input" accept=".pdf,.xlsx,.xls,.csv">
+                            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M24 32V16m0 0l-6 6m6-6l6 6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 34v4a4 4 0 004 4h24a4 4 0 004-4v-4" stroke-linecap="round"/></svg>
+                            <p>Drag and drop or click to select</p>
+                            <small>PDF, Excel, CSV</small>
+                        </div>
+                        <div id="file-name"></div>
+                        <button id="parse-btn" class="btn-primary upload-parse-btn" disabled>Parse Document</button>
+                    </div>
+                </div>
 
                 <div id="parse-results" class="parse-results hidden">
-                    <h3>Extracted Data</h3>
-                    <div class="results-grid">
-                        <div class="result-col">
-                            <h4>Controls <span id="control-count"></span></h4>
-                            <div id="controls-table" class="data-table"></div>
+                    <div class="card">
+                        <h3>3. Review & Import</h3>
+                        <div id="upload-summary" class="upload-summary"></div>
+                        <div class="two-col">
+                            <div>
+                                <h4>Controls <span id="control-count" class="count-badge"></span></h4>
+                                <div id="controls-table" class="table-wrap"></div>
+                            </div>
+                            <div>
+                                <h4>Mappings <span id="mapping-count" class="count-badge"></span></h4>
+                                <div id="mappings-table" class="table-wrap"></div>
+                            </div>
                         </div>
-                        <div class="result-col">
-                            <h4>Mappings <span id="mapping-count"></span></h4>
-                            <div id="mappings-table" class="data-table"></div>
-                        </div>
+                        <button id="import-btn" class="btn-primary">Import to Database</button>
                     </div>
-                    <button id="import-btn" class="btn-primary">Import to Database</button>
                 </div>
-
                 <div id="import-status" class="status hidden"></div>
-            </div>
-        </section>
+            </section>
+        </main>
     </div>
 
-    <script src="app.js"></script>
+    <script src="/static/app.js"></script>
 </body>
 </html>

@@ -1,1 +1,10 @@
-/.cursor
+__pycache__/
+*.pyc
+*.pyo
+*.db
+.env
+/.cursor/
+data/*.pdf
+data/*.xlsx
+data/*.xls
+pgdata/
