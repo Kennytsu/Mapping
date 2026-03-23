@@ -248,6 +248,47 @@ select:focus, input[type="text"]:focus {
 .btn-primary:hover { background: var(--blue-70); }
 .btn-primary:disabled { background: var(--gray-30); cursor: not-allowed; }
 
+.btn-secondary {
+    font-family: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 9px 20px;
+    background: var(--white);
+    color: var(--blue-60);
+    border: 1px solid var(--blue-60);
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    white-space: nowrap;
+}
+.btn-secondary:hover { background: var(--blue-10); }
+
+.btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--white);
+    color: var(--gray-70);
+    border: 1px solid var(--gray-20);
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .15s, color .15s;
+    align-self: flex-end;
+    margin-bottom: 1px;
+}
+.btn-icon:hover { background: var(--gray-10); color: var(--gray-100); }
+
+.card-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.card-header-row h3 { margin-bottom: 0; }
+
 /* ─── Search Bar ─────────────────────────────────────────────────── */
 
 .search-bar {
@@ -387,6 +428,22 @@ select:focus, input[type="text"]:focus {
     gap: 8px;
     margin-bottom: 4px;
 }
+
+.mapping-back-btn {
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    background: var(--gray-10);
+    color: var(--gray-70);
+    border: 1px solid var(--gray-20);
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.mapping-back-btn:hover { background: var(--gray-20); color: var(--gray-100); }
 
 .mappings-header h2 {
     font-size: 1rem;
@@ -614,6 +671,20 @@ select:focus, input[type="text"]:focus {
     margin-bottom: 3px;
     background: var(--gray-10);
     font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+}
+
+.scroll-list .detail-item.coverage-link {
+    cursor: pointer;
+    transition: background .15s;
+}
+.scroll-list .detail-item.coverage-link:hover {
+    background: var(--blue-10);
+    color: var(--blue-70);
+}
+.detail-title {
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--gray-70);
     font-size: 0.75rem;
 }
 

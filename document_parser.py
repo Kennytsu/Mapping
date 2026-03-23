@@ -43,6 +43,11 @@ _BSI_MODULE_PATTERN = re.compile(r"\b([A-Z]{2,5}\.\d+(?:\.\d+)?)\b")
 _BSI_STD_PATTERN = re.compile(r"(BSI-Standard\s+200-[1-4])")
 _CLAUSE_START = re.compile(r"^(\d+(?:\.\d+)*)\s+[A-Z]")
 
+# Only emit module controls whose prefix matches a real BSI IT-Grundschutz topic layer
+_BSI_MODULE_PREFIXES = {
+    "ISMS", "ORP", "CON", "OPS", "APP", "SYS", "IND", "INF", "DER", "NET", "TNA",
+}
+
 _BSI_STD_TITLES = {
     "BSI-Std-200-1": "BSI-Standard 200-1: Managementsysteme fuer Informationssicherheit (ISMS)",
     "BSI-Std-200-2": "BSI-Standard 200-2: IT-Grundschutz-Methodik",
@@ -160,7 +165,8 @@ def parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> dict:
             for bsi_ctrl in _BSI_REQ_PATTERN.findall(section):
                 _add_bsi(bsi_ctrl, current_iso)
             for bsi_mod in _BSI_MODULE_PATTERN.findall(section):
-                if ".A" not in bsi_mod and bsi_mod not in seen_bsi:
+                prefix = bsi_mod.split(".")[0]
+                if ".A" not in bsi_mod and prefix in _BSI_MODULE_PREFIXES and bsi_mod not in seen_bsi:
                     seen_bsi.add(bsi_mod)
                     cat = re.match(r"([A-Z]+)", bsi_mod)
                     controls.append({
@@ -356,7 +362,7 @@ def _detect_columns(columns: list[str], doc_type: str) -> dict | None:
             ref_count += 1
         elif "title" in low:
             result.setdefault("title", col)
-        elif "criteria" in low or "description" in low or "basic" in low:
+        elif any(kw in low for kw in ("criteria", "description", "basic", "requirement")):
             result.setdefault("description", col)
         elif "iso" in low or "27001" in low:
             result.setdefault("iso", col)

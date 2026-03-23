@@ -102,9 +102,9 @@
                         <label for="source-fw">Source Framework</label>
                         <select id="source-fw"></select>
                     </div>
-                    <span class="arrow-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                    </span>
+                    <button id="swap-fw-btn" class="btn-icon" title="Swap frameworks">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M7 3l-4 4 4 4V8h6V6H7V3zm6 14l4-4-4-4v3H7v2h6v3z"/></svg>
+                    </button>
                     <div class="field">
                         <label for="target-fw">Target Framework</label>
                         <select id="target-fw"></select>
@@ -113,6 +113,7 @@
                 </div>
 
                 <div id="coverage-results" class="hidden">
+                <div id="coverage-status" class="status hidden"></div>
                     <div class="stats-grid">
                         <div class="stat-card"><div class="stat-value" id="stat-total">-</div><div class="stat-label">Source Controls</div></div>
                         <div class="stat-card accent-green"><div class="stat-value" id="stat-mapped">-</div><div class="stat-label">Mapped</div></div>
@@ -131,7 +132,10 @@
                         </div>
                     </div>
                     <div class="card">
-                        <h3>Full Mapping Table</h3>
+                        <div class="card-header-row">
+                            <h3>Full Mapping Table</h3>
+                            <button id="export-csv-btn" class="btn-secondary">Export CSV</button>
+                        </div>
                         <div id="mapping-table-container" class="table-wrap"></div>
                     </div>
                 </div>

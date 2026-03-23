@@ -3,6 +3,7 @@ const API = '';
 let parsedData = null;
 let selectedFile = null;
 let frameworksCache = [];
+let mappingHistory = [];
 
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
@@ -26,6 +27,17 @@ function initTabs() {
             document.getElementById(tab.dataset.tab).classList.add('active');
         });
     });
+}
+
+function switchToLookup(controlId) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.tab[data-tab="lookup"]').classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(c => c.classList.remove('active'));
+    document.getElementById('lookup').classList.add('active');
+    document.getElementById('search-input').value = controlId;
+    clearTimeout(_searchDebounce);
+    mappingHistory = [];
+    performSearch();
 }
 
 // ---------------------------------------------------------------------------
@@ -77,13 +89,31 @@ function populateFrameworkSelects() {
 // Control Lookup
 // ---------------------------------------------------------------------------
 
+let _searchDebounce = null;
+
 function initSearch() {
     document.getElementById('search-btn').addEventListener('click', performSearch);
+    document.getElementById('search-input').addEventListener('input', () => {
+        clearTimeout(_searchDebounce);
+        const val = document.getElementById('search-input').value.trim();
+        if (!val) {
+            document.getElementById('search-results').innerHTML =
+                '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="20" cy="20" r="14"/><path d="M30 30l12 12" stroke-linecap="round"/></svg><p>Search for a control to get started.</p></div>';
+            document.getElementById('mapping-results').innerHTML =
+                '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h36M6 24h24M6 36h30" stroke-linecap="round"/></svg><p>Select a control to view its mappings.</p></div>';
+            return;
+        }
+        _searchDebounce = setTimeout(performSearch, 350);
+    });
     document.getElementById('search-input').addEventListener('keypress', e => {
-        if (e.key === 'Enter') performSearch();
+        if (e.key === 'Enter') {
+            clearTimeout(_searchDebounce);
+            performSearch();
+        }
     });
     document.getElementById('clear-btn').addEventListener('click', () => {
         document.getElementById('search-input').value = '';
+        clearTimeout(_searchDebounce);
         document.getElementById('search-results').innerHTML =
             '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="20" cy="20" r="14"/><path d="M30 30l12 12" stroke-linecap="round"/></svg><p>Search for a control to get started.</p></div>';
         document.getElementById('mapping-results').innerHTML =
@@ -113,7 +143,11 @@ async function performSearch() {
             return;
         }
 
-        resultsDiv.innerHTML = `<div class="results-heading">Found ${controls.length} control${controls.length > 1 ? 's' : ''}</div>`;
+        const displayed = Math.min(controls.length, 50);
+        const countNote = controls.length > 50
+            ? `Showing 50 of ${controls.length}`
+            : `${controls.length} control${controls.length > 1 ? 's' : ''}`;
+        resultsDiv.innerHTML = `<div class="results-heading">${countNote}</div>`;
 
         controls.slice(0, 50).forEach(ctrl => {
             const item = document.createElement('div');
@@ -127,6 +161,7 @@ async function performSearch() {
             item.addEventListener('click', () => {
                 document.querySelectorAll('.result-item').forEach(i => i.classList.remove('selected'));
                 item.classList.add('selected');
+                mappingHistory = [];
                 showMappings(ctrl);
             });
             resultsDiv.appendChild(item);
@@ -136,9 +171,13 @@ async function performSearch() {
     }
 }
 
-async function showMappings(ctrl) {
+async function showMappings(ctrl, pushHistory = true) {
     const div = document.getElementById('mapping-results');
     div.innerHTML = '<div class="loading">Loading mappings</div>';
+
+    if (pushHistory) {
+        mappingHistory.push(ctrl);
+    }
 
     try {
         const res = await fetch(
@@ -152,7 +191,10 @@ async function showMappings(ctrl) {
         }
 
         const fwName = ctrl.framework_short_name || data.source.framework_short_name;
-        let html = `<div class="mappings-header"><h2>${esc(ctrl.control_id)}</h2><span class="fw-badge">${esc(fwName)}</span></div>`;
+        const backBtn = mappingHistory.length > 1
+            ? `<button class="mapping-back-btn" id="mapping-back-btn">&#8592; Back</button>`
+            : '';
+        let html = `<div class="mappings-header">${backBtn}<h2>${esc(ctrl.control_id)}</h2><span class="fw-badge">${esc(fwName)}</span></div>`;
         html += `<div class="mappings-subtitle">${esc(data.source.title)}</div>`;
 
         if (!data.mappings || data.mappings.length === 0) {
@@ -183,6 +225,15 @@ async function showMappings(ctrl) {
         }
         div.innerHTML = html;
 
+        const backEl = document.getElementById('mapping-back-btn');
+        if (backEl) {
+            backEl.addEventListener('click', () => {
+                mappingHistory.pop();
+                const prev = mappingHistory[mappingHistory.length - 1];
+                showMappings(prev, false);
+            });
+        }
+
         div.querySelectorAll('.mapping-item.clickable').forEach(el => {
             el.addEventListener('click', () => {
                 showMappings({
@@ -201,20 +252,33 @@ async function showMappings(ctrl) {
 // Coverage Analysis
 // ---------------------------------------------------------------------------
 
+let _lastCoverageTable = null;
+
 function initCoverage() {
     document.getElementById('analyze-btn').addEventListener('click', runCoverage);
+    document.getElementById('swap-fw-btn').addEventListener('click', () => {
+        const src = document.getElementById('source-fw');
+        const tgt = document.getElementById('target-fw');
+        const tmp = src.value;
+        src.value = tgt.value;
+        tgt.value = tmp;
+    });
+    document.getElementById('export-csv-btn').addEventListener('click', exportCoverageCSV);
 }
 
 async function runCoverage() {
     const srcId = document.getElementById('source-fw').value;
     const tgtId = document.getElementById('target-fw').value;
     if (!srcId || !tgtId || srcId === tgtId) {
-        alert('Select two different frameworks.');
+        showCoverageStatus('Select two different frameworks.', 'error');
         return;
     }
 
     const resultsDiv = document.getElementById('coverage-results');
     resultsDiv.classList.remove('hidden');
+
+    const statusEl = document.getElementById('coverage-status');
+    if (statusEl) statusEl.classList.add('hidden');
 
     ['stat-total','stat-mapped','stat-unmapped','stat-percent'].forEach(id => {
         document.getElementById(id).textContent = '...';
@@ -228,6 +292,7 @@ async function runCoverage() {
 
         const coverage = await coverageRes.json();
         const table = await tableRes.json();
+        _lastCoverageTable = table;
 
         document.getElementById('stat-total').textContent = coverage.total_source_controls;
         document.getElementById('stat-mapped').textContent = coverage.mapped_controls;
@@ -238,19 +303,31 @@ async function runCoverage() {
         const unmappedList = document.getElementById('unmapped-list');
         document.getElementById('unmapped-count').textContent = `(${coverage.unmapped_control_ids.length})`;
         unmappedList.innerHTML = coverage.unmapped_control_ids.length > 0
-            ? coverage.unmapped_control_ids.map(id => `<div class="detail-item">${esc(id)}</div>`).join('')
+            ? coverage.unmapped_control_ids.map(c => `<div class="detail-item coverage-link" data-id="${esc(c.id)}">${esc(c.id)}${c.title ? ` <span class="detail-title">— ${esc(c.title)}</span>` : ''}</div>`).join('')
             : '<div class="empty-state"><p>All controls are mapped.</p></div>';
 
         const gapList = document.getElementById('gap-list');
         document.getElementById('gap-count').textContent = `(${coverage.gap_controls.length})`;
         gapList.innerHTML = coverage.gap_controls.length > 0
-            ? coverage.gap_controls.map(id => `<div class="detail-item">${esc(id)}</div>`).join('')
+            ? coverage.gap_controls.map(c => `<div class="detail-item coverage-link" data-id="${esc(c.id)}">${esc(c.id)}${c.title ? ` <span class="detail-title">— ${esc(c.title)}</span>` : ''}</div>`).join('')
             : '<div class="empty-state"><p>Full coverage.</p></div>';
 
         renderMappingTable(table);
+
+        document.querySelectorAll('.coverage-link').forEach(el => {
+            el.addEventListener('click', () => switchToLookup(el.dataset.id));
+        });
     } catch (err) {
-        alert('Coverage analysis failed: ' + err.message);
+        showCoverageStatus('Coverage analysis failed: ' + err.message, 'error');
     }
+}
+
+function showCoverageStatus(message, type) {
+    const el = document.getElementById('coverage-status');
+    if (!el) return;
+    el.textContent = message;
+    el.className = `status ${type}`;
+    el.classList.remove('hidden');
 }
 
 function renderMappingTable(table) {
@@ -283,9 +360,30 @@ function renderMappingTable(table) {
     container.innerHTML = html + '</tbody></table>';
 }
 
-// ---------------------------------------------------------------------------
-// Version Tracking
-// ---------------------------------------------------------------------------
+function exportCoverageCSV() {
+    if (!_lastCoverageTable || !_lastCoverageTable.rows) return;
+    const { source_framework, target_framework, rows } = _lastCoverageTable;
+    const header = [source_framework, 'Source Title', target_framework, 'Target Title', 'Type'];
+    const lines = [header.join(',')];
+    rows.forEach(r => {
+        lines.push([
+            JSON.stringify(r.source_id),
+            JSON.stringify(r.source_title),
+            JSON.stringify(r.target_id || 'No mapping'),
+            JSON.stringify(r.target_title),
+            JSON.stringify(r.source_type),
+        ].join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `coverage_${source_framework}_to_${target_framework}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+
 
 function initVersions() {
     document.getElementById('version-fw').addEventListener('change', loadTransitions);

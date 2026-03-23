@@ -60,8 +60,8 @@ class CoverageOut(BaseModel):
     mapped_controls: int
     unmapped_controls: int
     coverage_percentage: float
-    unmapped_control_ids: list[str]
-    gap_controls: list[str]
+    unmapped_control_ids: list[dict]
+    gap_controls: list[dict]
 
 class VersionChangeOut(BaseModel):
     id: int
@@ -170,7 +170,7 @@ async def search_controls(
         stmt = stmt.order_by(exact_first, Control.control_id)
     else:
         stmt = stmt.order_by(Control.control_id)
-    stmt = stmt.limit(100)
+    stmt = stmt.limit(200)
 
     rows = (await session.execute(stmt)).all()
     return [
@@ -262,16 +262,16 @@ async def coverage_analysis(
         raise HTTPException(404, "Framework not found")
 
     src_controls = (await session.execute(
-        select(Control.id, Control.control_id).where(Control.framework_id == source)
+        select(Control.id, Control.control_id, Control.title).where(Control.framework_id == source)
     )).all()
     tgt_controls = (await session.execute(
-        select(Control.id, Control.control_id).where(Control.framework_id == target)
+        select(Control.id, Control.control_id, Control.title).where(Control.framework_id == target)
     )).all()
 
     src_ids = {r[0] for r in src_controls}
-    src_map = {r[0]: r[1] for r in src_controls}
+    src_map = {r[0]: {"id": r[1], "title": r[2] or ""} for r in src_controls}
     tgt_ids = {r[0] for r in tgt_controls}
-    tgt_map = {r[0]: r[1] for r in tgt_controls}
+    tgt_map = {r[0]: {"id": r[1], "title": r[2] or ""} for r in tgt_controls}
 
     mapped_src = set()
     mapped_tgt = set()
