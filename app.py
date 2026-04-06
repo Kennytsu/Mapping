@@ -1,11 +1,12 @@
 """Compliance Mapping Tool - FastAPI Backend."""
 
 from contextlib import asynccontextmanager
+from io import BytesIO
 from typing import Optional
 
 from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func, or_, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -473,6 +474,145 @@ async def coverage_table(
     }
 
 
+@app.get("/api/coverage/export")
+async def coverage_export(
+    source: int = Query(..., description="Source framework ID"),
+    target: int = Query(..., description="Target framework ID"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Download an Excel workbook with mapping summary, full table, and gap list."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    src_fw = (await session.execute(
+        select(Framework).where(Framework.id == source)
+    )).scalar_one_or_none()
+    tgt_fw = (await session.execute(
+        select(Framework).where(Framework.id == target)
+    )).scalar_one_or_none()
+    if not src_fw or not tgt_fw:
+        raise HTTPException(404, "Framework not found")
+
+    src_controls = (await session.execute(
+        select(Control).where(Control.framework_id == source).order_by(Control.control_id)
+    )).scalars().all()
+    tgt_controls = (await session.execute(
+        select(Control.id, Control.control_id, Control.title).where(Control.framework_id == target)
+    )).all()
+
+    tgt_ids = {r[0] for r in tgt_controls}
+    tgt_map = {r[0]: {"id": r[1], "title": r[2] or ""} for r in tgt_controls}
+
+    table_rows = []
+    mapped_src_ids = set()
+    mapped_tgt_ids = set()
+
+    for sc in src_controls:
+        mapped = (await session.execute(
+            select(Control, Mapping.confidence, Mapping.source_type)
+            .join(
+                Mapping,
+                or_(
+                    and_(Mapping.source_control_id == sc.id, Mapping.target_control_id == Control.id),
+                    and_(Mapping.target_control_id == sc.id, Mapping.source_control_id == Control.id),
+                ),
+            )
+            .where(Control.framework_id == target)
+        )).all()
+
+        if mapped:
+            mapped_src_ids.add(sc.id)
+            for tc, conf, st in mapped:
+                mapped_tgt_ids.add(tc.id)
+                table_rows.append((sc.control_id, sc.title or "", tc.control_id, tc.title or "", st))
+        else:
+            table_rows.append((sc.control_id, sc.title or "", "", "", "gap"))
+
+    total = len(src_controls)
+    mapped_count = len(mapped_src_ids)
+    pct = round((mapped_count / total * 100) if total else 0, 1)
+    unmapped = [(sc.control_id, sc.title or "") for sc in src_controls if sc.id not in mapped_src_ids]
+    gap_targets = [(tgt_map[tid]["id"], tgt_map[tid]["title"]) for tid in tgt_ids if tid not in mapped_tgt_ids]
+
+    wb = Workbook()
+    header_font = Font(bold=True, size=11)
+    header_fill = PatternFill(start_color="D9E2F3", end_color="D9E2F3", fill_type="solid")
+    thin_border = Border(
+        bottom=Side(style="thin", color="C6C6C6"),
+    )
+
+    def _style_header(ws, cols):
+        for col_idx, val in enumerate(cols, 1):
+            cell = ws.cell(row=1, column=col_idx, value=val)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="left")
+        ws.freeze_panes = "A2"
+
+    # Sheet 1: Summary
+    ws_sum = wb.active
+    ws_sum.title = "Summary"
+    ws_sum.column_dimensions["A"].width = 25
+    ws_sum.column_dimensions["B"].width = 40
+    summary_data = [
+        ("Source Framework", f"{src_fw.short_name} ({src_fw.version})"),
+        ("Target Framework", f"{tgt_fw.short_name} ({tgt_fw.version})"),
+        ("Total Source Controls", total),
+        ("Mapped Controls", mapped_count),
+        ("Unmapped Controls", total - mapped_count),
+        ("Coverage", f"{pct}%"),
+    ]
+    for r, (label, value) in enumerate(summary_data, 1):
+        ws_sum.cell(row=r, column=1, value=label).font = Font(bold=True)
+        ws_sum.cell(row=r, column=2, value=value)
+
+    # Sheet 2: Full Mapping Table
+    ws_table = wb.create_sheet("Mapping Table")
+    headers = [src_fw.short_name, "Source Title", tgt_fw.short_name, "Target Title", "Type"]
+    _style_header(ws_table, headers)
+    gap_fill = PatternFill(start_color="FFF1F1", end_color="FFF1F1", fill_type="solid")
+    for r, (s_id, s_title, t_id, t_title, stype) in enumerate(table_rows, 2):
+        ws_table.cell(row=r, column=1, value=s_id)
+        ws_table.cell(row=r, column=2, value=s_title)
+        c3 = ws_table.cell(row=r, column=3, value=t_id or "No mapping")
+        ws_table.cell(row=r, column=4, value=t_title)
+        ws_table.cell(row=r, column=5, value=stype)
+        if stype == "gap":
+            for col in range(1, 6):
+                ws_table.cell(row=r, column=col).fill = gap_fill
+    for col_idx in range(1, 6):
+        ws_table.column_dimensions[chr(64 + col_idx)].width = 30
+
+    # Sheet 3: Unmapped Source Controls
+    ws_unmapped = wb.create_sheet("Unmapped Controls")
+    _style_header(ws_unmapped, ["Control ID", "Title"])
+    for r, (ctrl_id, title) in enumerate(unmapped, 2):
+        ws_unmapped.cell(row=r, column=1, value=ctrl_id)
+        ws_unmapped.cell(row=r, column=2, value=title)
+    ws_unmapped.column_dimensions["A"].width = 20
+    ws_unmapped.column_dimensions["B"].width = 60
+
+    # Sheet 4: Target Gaps
+    ws_gaps = wb.create_sheet("Target Gaps")
+    _style_header(ws_gaps, ["Control ID", "Title"])
+    for r, (ctrl_id, title) in enumerate(gap_targets, 2):
+        ws_gaps.cell(row=r, column=1, value=ctrl_id)
+        ws_gaps.cell(row=r, column=2, value=title)
+    ws_gaps.column_dimensions["A"].width = 20
+    ws_gaps.column_dimensions["B"].width = 60
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"coverage_{src_fw.short_name}_to_{tgt_fw.short_name}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.post("/api/upload", response_model=ParseResult)
 async def upload_document(
     file: UploadFile = File(...),
@@ -587,6 +727,86 @@ async def import_data(
 
     await session.commit()
     return ImportResult(success=True, controls_added=controls_added, mappings_added=mappings_added)
+
+
+# ---------------------------------------------------------------------------
+# AI module skeleton endpoints
+# ---------------------------------------------------------------------------
+
+class EmbeddingRequest(BaseModel):
+    framework_id: int
+    model: str = "text-embedding-3-small"
+
+
+@app.post("/api/embeddings/generate")
+async def generate_embeddings(body: EmbeddingRequest):
+    """Placeholder for embedding generation — to be implemented by the AI module."""
+    return {
+        "status": "not_implemented",
+        "message": "Embedding generation will be handled by the AI module. "
+                   f"Requested: framework_id={body.framework_id}, model={body.model}",
+    }
+
+
+@app.get("/api/mappings/suggest")
+async def suggest_mappings(
+    control_id: str = Query(..., description="Source control ID to find suggestions for"),
+    framework_id: int = Query(..., description="Target framework ID"),
+    top_k: int = Query(5, description="Number of suggestions to return"),
+    session: AsyncSession = Depends(get_session),
+):
+    """AI-powered mapping suggestions via pgvector cosine similarity.
+
+    Returns empty results until embeddings are generated by the AI module.
+    """
+    source = (await session.execute(
+        select(Control).where(Control.control_id == control_id)
+    )).scalar_one_or_none()
+    if not source:
+        raise HTTPException(404, "Source control not found")
+
+    if source.embedding is None:
+        return {
+            "source_control": control_id,
+            "target_framework_id": framework_id,
+            "suggestions": [],
+            "message": "No embeddings available. Run embedding generation first.",
+        }
+
+    try:
+        from pgvector.sqlalchemy import Vector
+        stmt = (
+            select(
+                Control.control_id,
+                Control.title,
+                Control.description,
+                Control.embedding.cosine_distance(source.embedding).label("distance"),
+            )
+            .where(Control.framework_id == framework_id)
+            .where(Control.embedding.isnot(None))
+            .order_by("distance")
+            .limit(top_k)
+        )
+        rows = (await session.execute(stmt)).all()
+        suggestions = [
+            {
+                "control_id": r[0],
+                "title": r[1] or "",
+                "description": r[2] or "",
+                "confidence": round(1 - r[3], 4),
+                "source_type": "ai_suggested",
+            }
+            for r in rows
+        ]
+    except Exception:
+        suggestions = []
+
+    return {
+        "source_control": control_id,
+        "target_framework_id": framework_id,
+        "suggestions": suggestions,
+        "message": "" if suggestions else "No embeddings available. Run embedding generation first.",
+    }
 
 
 # ---------------------------------------------------------------------------

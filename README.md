@@ -33,6 +33,7 @@ flowchart TB
 | **Coverage Analysis** | Compare two frameworks: coverage percentage, gap list, unmapped controls, full mapping table. |
 | **Version Tracking** | Track changes between framework versions (added, modified, renamed, removed controls). |
 | **Document Upload** | Upload new mapping documents (PDF, Excel, CSV) with explicit source/target framework and year selection. |
+| **Excel Export** | Download a styled Excel audit report with summary, full mapping table, unmapped controls, and target gaps. |
 | **BSI-Standard Refs** | Parses both IT-Grundschutz requirement IDs (e.g. `ISMS.1.A3`) and BSI-Standard document references (e.g. `BSI-Standard 200-2, Kapitel 9`). |
 | **API Docs** | Auto-generated Swagger UI at `/docs`. |
 
@@ -54,7 +55,7 @@ flowchart TB
 | Layer | Technology |
 |-------|-----------|
 | Backend | FastAPI, SQLAlchemy (async), Pydantic |
-| Database | PostgreSQL 16 (pgvector-ready for future AI module) |
+| Database | PostgreSQL 16 + pgvector extension |
 | Frontend | Vanilla HTML/CSS/JS, IBM Plex Sans/Mono |
 | Containerization | Podman + podman-compose |
 | PDF Parsing | pdfplumber |
@@ -65,7 +66,7 @@ flowchart TB
 
 ```sql
 frameworks   (id, name, short_name, version, description, is_active)
-controls     (id, framework_id, control_id, title, description, category, UNIQUE(framework_id, control_id))
+controls     (id, framework_id, control_id, title, description, category, embedding[vector(1536)], UNIQUE(framework_id, control_id))
 mappings     (id, source_control_id, target_control_id, confidence, source_type, source_document, notes)
 version_changes (id, framework_id, old_version, new_version, change_type, old_control_id, new_control_id, description)
 ```
@@ -126,11 +127,48 @@ podman exec compliance-app python seed_data.py \
 | GET | `/api/mappings/{control_id}?framework_id=` | Bidirectional mappings for a control |
 | GET | `/api/coverage?source=&target=` | Coverage stats between two frameworks |
 | GET | `/api/coverage/table?source=&target=` | Full mapping table for export |
+| GET | `/api/coverage/export?source=&target=` | Download Excel audit report (.xlsx) |
 | GET | `/api/versions/{fw}/transitions` | Available version transitions |
 | GET | `/api/versions/{fw}/changes?from=&to=` | Version change details |
 | POST | `/api/upload` | Parse a document (returns preview) |
 | POST | `/api/import` | Import parsed controls and mappings |
+| POST | `/api/embeddings/generate` | Placeholder — trigger embedding generation (AI module) |
+| GET | `/api/mappings/suggest?control_id=&framework_id=&top_k=` | AI-suggested mappings via cosine similarity |
 
-## Future: AI Suggestions (Phase 4)
+## Phase 4: AI Suggestions (In Progress)
 
-The database is pgvector-ready for a colleague's AI module based on the paper [Towards Automated Regulation Analysis for Effective Privacy Compliance](https://www.ndss-symposium.org/wp-content/uploads/2024-650-paper.pdf). AI-suggested mappings will be stored with `source_type='ai_suggested'` and a confidence score, displayed separately from official mappings in the UI.
+The infrastructure is in place for a colleague's AI module based on [Towards Automated Regulation Analysis for Effective Privacy Compliance](https://www.ndss-symposium.org/wp-content/uploads/2024-650-paper.pdf).
+
+### What's ready
+
+| Component | Status |
+|-----------|--------|
+| `pgvector/pgvector:pg16` Docker image | Installed |
+| `CREATE EXTENSION vector` | Auto-enabled on startup |
+| `controls.embedding` column (`vector(1536)`) | Added, nullable |
+| `POST /api/embeddings/generate` | Placeholder — returns `not_implemented` |
+| `GET /api/mappings/suggest` | Skeleton — performs cosine similarity when embeddings exist |
+
+### Data flow
+
+```mermaid
+flowchart LR
+    subgraph current [Current - Official Mappings]
+        PDF[BSI PDF] --> Parser
+        Excel[C5 Excel] --> Parser
+        Parser --> DB[(PostgreSQL + pgvector)]
+    end
+    subgraph ai [AI Module - Next Steps]
+        Controls[Control text] --> Embedder["OpenAI text-embedding-3-small"]
+        Embedder --> Vectors["controls.embedding column"]
+        Vectors --> Similarity["Cosine similarity search"]
+        Similarity --> Suggestions["GET /api/mappings/suggest"]
+    end
+    DB --> Controls
+```
+
+### Next steps for the AI module
+
+1. Implement `POST /api/embeddings/generate` — iterate over controls in a framework, call the embedding model, and store vectors in the `embedding` column.
+2. The `GET /api/mappings/suggest` endpoint will automatically start returning results once embeddings exist.
+3. AI-suggested mappings use `source_type='ai_suggested'` with a confidence score derived from cosine similarity.

@@ -264,6 +264,7 @@ function initCoverage() {
         tgt.value = tmp;
     });
     document.getElementById('export-csv-btn').addEventListener('click', exportCoverageCSV);
+    document.getElementById('export-xlsx-btn').addEventListener('click', exportCoverageExcel);
 }
 
 async function runCoverage() {
@@ -381,6 +382,13 @@ function exportCoverageCSV() {
     a.download = `coverage_${source_framework}_to_${target_framework}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+}
+
+function exportCoverageExcel() {
+    const srcId = document.getElementById('source-fw').value;
+    const tgtId = document.getElementById('target-fw').value;
+    if (!srcId || !tgtId) return;
+    window.open(`${API}/api/coverage/export?source=${srcId}&target=${tgtId}`, '_blank');
 }
 
 

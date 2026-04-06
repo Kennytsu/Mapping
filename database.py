@@ -8,6 +8,11 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
+    Vector = None
+
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql+asyncpg://compliance:compliance_dev@localhost:5432/compliance_mapping",
@@ -50,6 +55,7 @@ class Control(Base):
     title = Column(String(500), nullable=False, default="")
     description = Column(Text, default="")
     category = Column(String(100), default="")
+    embedding = Column(Vector(1536), nullable=True) if Vector else Column(Text, nullable=True)
 
     framework = relationship("Framework", back_populates="controls")
 
@@ -89,14 +95,24 @@ class VersionChange(Base):
     framework = relationship("Framework")
 
 
+async def ensure_pgvector():
+    """Enable the pgvector extension if available."""
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+
 async def init_db():
-    """Create all tables."""
+    """Create pgvector extension and all tables."""
+    await ensure_pgvector()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 
 def init_db_sync():
     """Create all tables synchronously (for seed script)."""
+    with sync_engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
     Base.metadata.create_all(sync_engine)
 
 
