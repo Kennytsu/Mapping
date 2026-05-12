@@ -41,18 +41,44 @@ class ControlOut(BaseModel):
     framework_short_name: str = ""
 
 class MappingOut(BaseModel):
+    id: int
     control_id: str
     title: str
     description: str
     category: str
     framework_short_name: str
+    framework_id: int
     confidence: float
     source_type: str
     source_document: str
+    notes: str = ""
 
 class MappingDetail(BaseModel):
     source: ControlOut
     mappings: list[MappingOut]
+
+
+class MappingCreate(BaseModel):
+    source_control_id: int
+    target_control_id: int
+    confidence: float = 1.0
+    source_type: str = "manual"
+    source_document: str = ""
+    notes: str = ""
+
+
+class MappingUpdate(BaseModel):
+    confidence: Optional[float] = None
+    source_type: Optional[str] = None
+    notes: Optional[str] = None
+    source_document: Optional[str] = None
+
+
+class ControlSearchOut(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[ControlOut]
 
 class CoverageOut(BaseModel):
     source_framework: str
@@ -143,15 +169,38 @@ async def list_frameworks(session: AsyncSession = Depends(get_session)):
     ]
 
 
-@app.get("/api/controls", response_model=list[ControlOut])
+@app.get("/api/controls", response_model=ControlSearchOut)
 async def search_controls(
     q: str = "",
     framework_id: Optional[int] = None,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
 ):
-    stmt = (
-        select(Control, Framework.short_name)
-        .join(Framework, Control.framework_id == Framework.id)
+    """Paginated control search.
+
+    Returns ``{ total, limit, offset, items }`` where ``total`` is the full
+    match count (independent of limit/offset) so the UI can render proper
+    pagination controls.
+    """
+    base = select(Control).join(Framework, Control.framework_id == Framework.id)
+    if framework_id:
+        base = base.where(Control.framework_id == framework_id)
+    if q:
+        pattern = f"%{q}%"
+        base = base.where(
+            or_(
+                Control.control_id.ilike(pattern),
+                Control.title.ilike(pattern),
+                Control.description.ilike(pattern),
+            )
+        )
+
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await session.execute(count_stmt)).scalar_one()
+
+    stmt = select(Control, Framework.short_name).join(
+        Framework, Control.framework_id == Framework.id
     )
     if framework_id:
         stmt = stmt.where(Control.framework_id == framework_id)
@@ -171,10 +220,10 @@ async def search_controls(
         stmt = stmt.order_by(exact_first, Control.control_id)
     else:
         stmt = stmt.order_by(Control.control_id)
-    stmt = stmt.limit(200)
+    stmt = stmt.limit(limit).offset(offset)
 
     rows = (await session.execute(stmt)).all()
-    return [
+    items = [
         ControlOut(
             id=c.id,
             framework_id=c.framework_id,
@@ -186,6 +235,7 @@ async def search_controls(
         )
         for c, sn in rows
     ]
+    return ControlSearchOut(total=total, limit=limit, offset=offset, items=items)
 
 
 @app.get("/api/mappings/{control_id}", response_model=MappingDetail)
@@ -217,7 +267,15 @@ async def get_mappings(
 
     # Bidirectional: find mappings where this control is source OR target
     stmt = (
-        select(Control, Framework.short_name, Mapping.confidence, Mapping.source_type, Mapping.source_document)
+        select(
+            Control,
+            Framework.short_name,
+            Mapping.id,
+            Mapping.confidence,
+            Mapping.source_type,
+            Mapping.source_document,
+            Mapping.notes,
+        )
         .join(
             Mapping,
             or_(
@@ -232,16 +290,19 @@ async def get_mappings(
 
     mappings_out = [
         MappingOut(
+            id=mid,
             control_id=c.control_id,
             title=c.title or "",
             description=c.description or "",
             category=c.category or "",
             framework_short_name=sn,
+            framework_id=c.framework_id,
             confidence=conf,
             source_type=st,
             source_document=sd or "",
+            notes=notes or "",
         )
-        for c, sn, conf, st, sd in rows
+        for c, sn, mid, conf, st, sd, notes in rows
     ]
 
     return MappingDetail(source=source_out, mappings=mappings_out)
@@ -436,7 +497,7 @@ async def coverage_table(
     rows = []
     for sc in src_controls:
         mapped = (await session.execute(
-            select(Control, Mapping.confidence, Mapping.source_type)
+            select(Control, Mapping.id, Mapping.confidence, Mapping.source_type, Mapping.notes)
             .join(
                 Mapping,
                 or_(
@@ -448,23 +509,27 @@ async def coverage_table(
         )).all()
 
         if mapped:
-            for tc, conf, st in mapped:
+            for tc, mid, conf, st, notes in mapped:
                 rows.append({
+                    "mapping_id": mid,
                     "source_id": sc.control_id,
                     "source_title": sc.title or "",
                     "target_id": tc.control_id,
                     "target_title": tc.title or "",
                     "confidence": conf,
                     "source_type": st,
+                    "notes": notes or "",
                 })
         else:
             rows.append({
+                "mapping_id": None,
                 "source_id": sc.control_id,
                 "source_title": sc.title or "",
                 "target_id": "",
                 "target_title": "",
                 "confidence": 0,
                 "source_type": "gap",
+                "notes": "",
             })
 
     return {
@@ -503,13 +568,22 @@ async def coverage_export(
     tgt_ids = {r[0] for r in tgt_controls}
     tgt_map = {r[0]: {"id": r[1], "title": r[2] or ""} for r in tgt_controls}
 
+    def _confidence_band(value: float) -> str:
+        if value >= 0.8:
+            return "Strong"
+        if value >= 0.5:
+            return "Partial"
+        if value > 0:
+            return "Weak"
+        return ""
+
     table_rows = []
     mapped_src_ids = set()
     mapped_tgt_ids = set()
 
     for sc in src_controls:
         mapped = (await session.execute(
-            select(Control, Mapping.confidence, Mapping.source_type)
+            select(Control, Mapping.confidence, Mapping.source_type, Mapping.notes)
             .join(
                 Mapping,
                 or_(
@@ -522,11 +596,15 @@ async def coverage_export(
 
         if mapped:
             mapped_src_ids.add(sc.id)
-            for tc, conf, st in mapped:
+            for tc, conf, st, notes in mapped:
                 mapped_tgt_ids.add(tc.id)
-                table_rows.append((sc.control_id, sc.title or "", tc.control_id, tc.title or "", st))
+                table_rows.append((
+                    sc.control_id, sc.title or "",
+                    tc.control_id, tc.title or "",
+                    st, conf, _confidence_band(conf or 0), notes or "",
+                ))
         else:
-            table_rows.append((sc.control_id, sc.title or "", "", "", "gap"))
+            table_rows.append((sc.control_id, sc.title or "", "", "", "gap", 0, "", ""))
 
     total = len(src_controls)
     mapped_count = len(mapped_src_ids)
@@ -568,20 +646,28 @@ async def coverage_export(
 
     # Sheet 2: Full Mapping Table
     ws_table = wb.create_sheet("Mapping Table")
-    headers = [src_fw.short_name, "Source Title", tgt_fw.short_name, "Target Title", "Type"]
+    headers = [
+        src_fw.short_name, "Source Title",
+        tgt_fw.short_name, "Target Title",
+        "Type", "Confidence", "Strength", "Notes",
+    ]
     _style_header(ws_table, headers)
     gap_fill = PatternFill(start_color="FFF1F1", end_color="FFF1F1", fill_type="solid")
-    for r, (s_id, s_title, t_id, t_title, stype) in enumerate(table_rows, 2):
+    for r, (s_id, s_title, t_id, t_title, stype, conf, band, notes) in enumerate(table_rows, 2):
         ws_table.cell(row=r, column=1, value=s_id)
         ws_table.cell(row=r, column=2, value=s_title)
-        c3 = ws_table.cell(row=r, column=3, value=t_id or "No mapping")
+        ws_table.cell(row=r, column=3, value=t_id or "No mapping")
         ws_table.cell(row=r, column=4, value=t_title)
         ws_table.cell(row=r, column=5, value=stype)
+        ws_table.cell(row=r, column=6, value=round(conf or 0, 2))
+        ws_table.cell(row=r, column=7, value=band)
+        ws_table.cell(row=r, column=8, value=notes)
         if stype == "gap":
-            for col in range(1, 6):
+            for col in range(1, 9):
                 ws_table.cell(row=r, column=col).fill = gap_fill
-    for col_idx in range(1, 6):
-        ws_table.column_dimensions[chr(64 + col_idx)].width = 30
+    widths = [18, 32, 18, 32, 14, 12, 12, 40]
+    for col_idx, w in enumerate(widths, 1):
+        ws_table.column_dimensions[chr(64 + col_idx)].width = w
 
     # Sheet 3: Unmapped Source Controls
     ws_unmapped = wb.create_sheet("Unmapped Controls")
@@ -727,6 +813,127 @@ async def import_data(
 
     await session.commit()
     return ImportResult(success=True, controls_added=controls_added, mappings_added=mappings_added)
+
+
+# ---------------------------------------------------------------------------
+# Mapping CRUD (manual create / edit / delete)
+# ---------------------------------------------------------------------------
+
+class MappingDetailOut(BaseModel):
+    id: int
+    source_control_id: int
+    target_control_id: int
+    confidence: float
+    source_type: str
+    source_document: str
+    notes: str
+
+
+def _serialize_mapping(m: Mapping) -> MappingDetailOut:
+    return MappingDetailOut(
+        id=m.id,
+        source_control_id=m.source_control_id,
+        target_control_id=m.target_control_id,
+        confidence=m.confidence,
+        source_type=m.source_type or "manual",
+        source_document=m.source_document or "",
+        notes=m.notes or "",
+    )
+
+
+@app.post("/api/mappings", response_model=MappingDetailOut, status_code=201)
+async def create_mapping(
+    body: MappingCreate,
+    session: AsyncSession = Depends(get_session),
+):
+    """Create a new mapping between two existing controls."""
+    if body.source_control_id == body.target_control_id:
+        raise HTTPException(400, "Source and target control must differ.")
+
+    src = (await session.execute(
+        select(Control).where(Control.id == body.source_control_id)
+    )).scalar_one_or_none()
+    tgt = (await session.execute(
+        select(Control).where(Control.id == body.target_control_id)
+    )).scalar_one_or_none()
+    if not src or not tgt:
+        raise HTTPException(404, "Source or target control not found.")
+
+    # Reject duplicates in either direction.
+    existing = (await session.execute(
+        select(Mapping).where(
+            or_(
+                and_(
+                    Mapping.source_control_id == body.source_control_id,
+                    Mapping.target_control_id == body.target_control_id,
+                ),
+                and_(
+                    Mapping.source_control_id == body.target_control_id,
+                    Mapping.target_control_id == body.source_control_id,
+                ),
+            )
+        )
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(409, "A mapping between these controls already exists.")
+
+    confidence = max(0.0, min(1.0, float(body.confidence)))
+    mapping = Mapping(
+        source_control_id=body.source_control_id,
+        target_control_id=body.target_control_id,
+        confidence=confidence,
+        source_type=body.source_type or "manual",
+        source_document=body.source_document or "manual entry",
+        notes=body.notes or "",
+    )
+    session.add(mapping)
+    await session.commit()
+    await session.refresh(mapping)
+    return _serialize_mapping(mapping)
+
+
+@app.patch("/api/mappings/{mapping_id}", response_model=MappingDetailOut)
+async def update_mapping(
+    mapping_id: int,
+    body: MappingUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    """Partially update a mapping (confidence, notes, source_type, source_document)."""
+    mapping = (await session.execute(
+        select(Mapping).where(Mapping.id == mapping_id)
+    )).scalar_one_or_none()
+    if not mapping:
+        raise HTTPException(404, "Mapping not found.")
+
+    if body.confidence is not None:
+        mapping.confidence = max(0.0, min(1.0, float(body.confidence)))
+    if body.source_type is not None:
+        mapping.source_type = body.source_type
+    if body.notes is not None:
+        mapping.notes = body.notes
+    if body.source_document is not None:
+        mapping.source_document = body.source_document
+
+    await session.commit()
+    await session.refresh(mapping)
+    return _serialize_mapping(mapping)
+
+
+@app.delete("/api/mappings/{mapping_id}", status_code=204)
+async def delete_mapping(
+    mapping_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete a mapping by ID."""
+    mapping = (await session.execute(
+        select(Mapping).where(Mapping.id == mapping_id)
+    )).scalar_one_or_none()
+    if not mapping:
+        raise HTTPException(404, "Mapping not found.")
+
+    await session.delete(mapping)
+    await session.commit()
+    return None
 
 
 # ---------------------------------------------------------------------------

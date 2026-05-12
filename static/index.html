@@ -78,6 +78,16 @@
                                 <p>Search for a control to get started.</p>
                             </div>
                         </div>
+                        <div id="search-pagination" class="pagination hidden">
+                            <button id="page-prev" class="btn-page" disabled>&#8592; Prev</button>
+                            <span id="page-info" class="page-info">-</span>
+                            <button id="page-next" class="btn-page" disabled>Next &#8594;</button>
+                            <select id="page-size" class="page-size" title="Results per page">
+                                <option value="25">25 / page</option>
+                                <option value="50" selected>50 / page</option>
+                                <option value="100">100 / page</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="lookup-col" id="mappings-col">
                         <div id="mapping-results" class="mappings">
@@ -133,10 +143,24 @@
                     </div>
                     <div class="card">
                         <div class="card-header-row">
-                            <h3>Full Mapping Table</h3>
+                            <h3>Full Mapping Table <span id="table-row-count" class="count-badge"></span></h3>
                             <div class="btn-group">
                                 <button id="export-csv-btn" class="btn-secondary">Export CSV</button>
                                 <button id="export-xlsx-btn" class="btn-secondary">Export Excel</button>
+                            </div>
+                        </div>
+                        <div class="table-toolbar">
+                            <div class="search-field table-search">
+                                <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+                                <input type="text" id="table-search-input" placeholder="Filter table by ID or title">
+                            </div>
+                            <div class="filter-chips" id="table-filter-chips">
+                                <button class="chip active" data-filter="all">All</button>
+                                <button class="chip" data-filter="mapped">Mapped</button>
+                                <button class="chip" data-filter="gap">Gaps</button>
+                                <button class="chip" data-filter="strong">Strong</button>
+                                <button class="chip" data-filter="partial">Partial</button>
+                                <button class="chip" data-filter="weak">Weak</button>
                             </div>
                         </div>
                         <div id="mapping-table-container" class="table-wrap"></div>
@@ -250,6 +274,68 @@
                 <div id="import-status" class="status hidden"></div>
             </section>
         </main>
+    </div>
+
+    <!-- Mapping editor modal (used for both add and edit) -->
+    <div id="mapping-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="mapping-modal-title">Edit Mapping</h3>
+                <button class="modal-close" id="mapping-modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="mapping-modal-source" class="modal-source-row">
+                    <span class="modal-label">Source</span>
+                    <span class="modal-value" id="mapping-modal-source-name">-</span>
+                </div>
+
+                <!-- Target picker only visible in 'add' mode -->
+                <div id="mapping-modal-target-picker" class="hidden">
+                    <div class="field">
+                        <label for="mm-target-fw">Target Framework</label>
+                        <select id="mm-target-fw"></select>
+                    </div>
+                    <div class="field">
+                        <label for="mm-target-search">Find Target Control</label>
+                        <div class="search-field">
+                            <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+                            <input type="text" id="mm-target-search" placeholder="Search by ID or keyword">
+                        </div>
+                        <div id="mm-target-results" class="mm-target-results"></div>
+                    </div>
+                </div>
+
+                <div id="mapping-modal-target-fixed" class="modal-source-row">
+                    <span class="modal-label">Target</span>
+                    <span class="modal-value" id="mapping-modal-target-name">-</span>
+                </div>
+
+                <div class="field">
+                    <label for="mm-source-type">Source Type</label>
+                    <select id="mm-source-type">
+                        <option value="official">Official</option>
+                        <option value="manual">Manual</option>
+                        <option value="ai_suggested">AI Suggested</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label for="mm-confidence">Confidence: <span id="mm-confidence-value">1.00</span> <span id="mm-confidence-band" class="confidence-chip strong">Strong</span></label>
+                    <input type="range" id="mm-confidence" min="0" max="1" step="0.05" value="1">
+                </div>
+
+                <div class="field">
+                    <label for="mm-notes">Notes</label>
+                    <textarea id="mm-notes" rows="3" placeholder="Reviewer notes (optional)"></textarea>
+                </div>
+
+                <div id="mapping-modal-error" class="status error hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="mapping-modal-cancel">Cancel</button>
+                <button class="btn-primary" id="mapping-modal-save">Save</button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>

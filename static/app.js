@@ -5,12 +5,37 @@ let selectedFile = null;
 let frameworksCache = [];
 let mappingHistory = [];
 
+const searchState = {
+    query: '',
+    frameworkId: '',
+    offset: 0,
+    limit: 50,
+    total: 0,
+};
+
+let _currentSourceCtrl = null;
+
+const tableState = {
+    filter: 'all',
+    search: '',
+    sortKey: 'source_id',
+    sortDir: 'asc',
+};
+
+const modalState = {
+    mode: 'edit', // 'edit' | 'add'
+    mappingId: null,
+    sourceCtrl: null,
+    targetCtrl: null,
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initSearch();
     initCoverage();
     initVersions();
     initUpload();
+    initMappingModal();
     loadFrameworks();
 });
 
@@ -37,6 +62,7 @@ function switchToLookup(controlId) {
     document.getElementById('search-input').value = controlId;
     clearTimeout(_searchDebounce);
     mappingHistory = [];
+    searchState.offset = 0;
     performSearch();
 }
 
@@ -67,6 +93,7 @@ function populateFrameworkSelects() {
         'version-fw': false,
         'upload-source-fw': false,
         'upload-target-fw': false,
+        'mm-target-fw': false,
     };
 
     for (const [id, addAll] of Object.entries(selects)) {
@@ -86,39 +113,96 @@ function populateFrameworkSelects() {
 }
 
 // ---------------------------------------------------------------------------
+// Confidence helpers
+// ---------------------------------------------------------------------------
+
+function confidenceBand(c) {
+    const v = Number(c) || 0;
+    if (v >= 0.8) return 'strong';
+    if (v >= 0.5) return 'partial';
+    if (v > 0) return 'weak';
+    return 'none';
+}
+
+function confidenceLabel(band) {
+    return { strong: 'Strong', partial: 'Partial', weak: 'Weak', none: '—' }[band] || '—';
+}
+
+function renderConfidenceChip(confidence) {
+    const band = confidenceBand(confidence);
+    const pct = Math.round((Number(confidence) || 0) * 100);
+    const label = confidenceLabel(band);
+    if (band === 'none') return `<span class="confidence-chip none">—</span>`;
+    return `<span class="confidence-chip ${band}" title="Confidence ${pct}%">${label} ${pct}%</span>`;
+}
+
+// ---------------------------------------------------------------------------
 // Control Lookup
 // ---------------------------------------------------------------------------
 
 let _searchDebounce = null;
 
 function initSearch() {
-    document.getElementById('search-btn').addEventListener('click', performSearch);
+    document.getElementById('search-btn').addEventListener('click', () => {
+        searchState.offset = 0;
+        performSearch();
+    });
     document.getElementById('search-input').addEventListener('input', () => {
         clearTimeout(_searchDebounce);
         const val = document.getElementById('search-input').value.trim();
         if (!val) {
-            document.getElementById('search-results').innerHTML =
-                '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="20" cy="20" r="14"/><path d="M30 30l12 12" stroke-linecap="round"/></svg><p>Search for a control to get started.</p></div>';
-            document.getElementById('mapping-results').innerHTML =
-                '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h36M6 24h24M6 36h30" stroke-linecap="round"/></svg><p>Select a control to view its mappings.</p></div>';
+            renderEmptySearch();
             return;
         }
+        searchState.offset = 0;
         _searchDebounce = setTimeout(performSearch, 350);
     });
     document.getElementById('search-input').addEventListener('keypress', e => {
         if (e.key === 'Enter') {
             clearTimeout(_searchDebounce);
+            searchState.offset = 0;
             performSearch();
         }
     });
     document.getElementById('clear-btn').addEventListener('click', () => {
         document.getElementById('search-input').value = '';
         clearTimeout(_searchDebounce);
-        document.getElementById('search-results').innerHTML =
-            '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="20" cy="20" r="14"/><path d="M30 30l12 12" stroke-linecap="round"/></svg><p>Search for a control to get started.</p></div>';
-        document.getElementById('mapping-results').innerHTML =
-            '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h36M6 24h24M6 36h30" stroke-linecap="round"/></svg><p>Select a control to view its mappings.</p></div>';
+        renderEmptySearch();
     });
+
+    document.getElementById('framework-filter').addEventListener('change', () => {
+        searchState.offset = 0;
+        const val = document.getElementById('search-input').value.trim();
+        if (val) performSearch();
+    });
+
+    document.getElementById('page-prev').addEventListener('click', () => {
+        if (searchState.offset >= searchState.limit) {
+            searchState.offset -= searchState.limit;
+            performSearch();
+        }
+    });
+    document.getElementById('page-next').addEventListener('click', () => {
+        if (searchState.offset + searchState.limit < searchState.total) {
+            searchState.offset += searchState.limit;
+            performSearch();
+        }
+    });
+    document.getElementById('page-size').addEventListener('change', e => {
+        searchState.limit = parseInt(e.target.value) || 50;
+        searchState.offset = 0;
+        const val = document.getElementById('search-input').value.trim();
+        if (val) performSearch();
+    });
+}
+
+function renderEmptySearch() {
+    document.getElementById('search-results').innerHTML =
+        '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="20" cy="20" r="14"/><path d="M30 30l12 12" stroke-linecap="round"/></svg><p>Search for a control to get started.</p></div>';
+    document.getElementById('mapping-results').innerHTML =
+        '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h36M6 24h24M6 36h30" stroke-linecap="round"/></svg><p>Select a control to view its mappings.</p></div>';
+    document.getElementById('search-pagination').classList.add('hidden');
+    _currentSourceCtrl = null;
 }
 
 async function performSearch() {
@@ -126,30 +210,38 @@ async function performSearch() {
     const frameworkId = document.getElementById('framework-filter').value;
     if (!query) return;
 
+    searchState.query = query;
+    searchState.frameworkId = frameworkId;
+
     const resultsDiv = document.getElementById('search-results');
     resultsDiv.innerHTML = '<div class="loading">Searching</div>';
     document.getElementById('mapping-results').innerHTML =
         '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h36M6 24h24M6 36h30" stroke-linecap="round"/></svg><p>Select a control to view its mappings.</p></div>';
 
     try {
-        let url = `${API}/api/controls?q=${encodeURIComponent(query)}`;
-        if (frameworkId) url += `&framework_id=${frameworkId}`;
+        const params = new URLSearchParams({
+            q: query,
+            limit: String(searchState.limit),
+            offset: String(searchState.offset),
+        });
+        if (frameworkId) params.set('framework_id', frameworkId);
 
-        const res = await fetch(url);
-        const controls = await res.json();
+        const res = await fetch(`${API}/api/controls?${params.toString()}`);
+        const data = await res.json();
+        const items = data.items || [];
+        searchState.total = data.total || 0;
 
-        if (controls.length === 0) {
+        if (searchState.total === 0) {
             resultsDiv.innerHTML = '<div class="empty-state"><p>No controls found.</p></div>';
+            document.getElementById('search-pagination').classList.add('hidden');
             return;
         }
 
-        const displayed = Math.min(controls.length, 50);
-        const countNote = controls.length > 50
-            ? `Showing 50 of ${controls.length}`
-            : `${controls.length} control${controls.length > 1 ? 's' : ''}`;
-        resultsDiv.innerHTML = `<div class="results-heading">${countNote}</div>`;
+        const start = searchState.offset + 1;
+        const end = Math.min(searchState.offset + items.length, searchState.total);
+        resultsDiv.innerHTML = `<div class="results-heading">Showing ${start}–${end} of ${searchState.total}</div>`;
 
-        controls.slice(0, 50).forEach(ctrl => {
+        items.forEach(ctrl => {
             const item = document.createElement('div');
             item.className = 'result-item';
             item.innerHTML = `
@@ -166,9 +258,26 @@ async function performSearch() {
             });
             resultsDiv.appendChild(item);
         });
+
+        renderPagination();
     } catch (err) {
         resultsDiv.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
     }
+}
+
+function renderPagination() {
+    const pag = document.getElementById('search-pagination');
+    if (searchState.total <= 0) {
+        pag.classList.add('hidden');
+        return;
+    }
+    pag.classList.remove('hidden');
+    const totalPages = Math.max(1, Math.ceil(searchState.total / searchState.limit));
+    const currentPage = Math.floor(searchState.offset / searchState.limit) + 1;
+    document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
+    document.getElementById('page-prev').disabled = searchState.offset === 0;
+    document.getElementById('page-next').disabled =
+        searchState.offset + searchState.limit >= searchState.total;
 }
 
 async function showMappings(ctrl, pushHistory = true) {
@@ -178,6 +287,7 @@ async function showMappings(ctrl, pushHistory = true) {
     if (pushHistory) {
         mappingHistory.push(ctrl);
     }
+    _currentSourceCtrl = ctrl;
 
     try {
         const res = await fetch(
@@ -190,15 +300,24 @@ async function showMappings(ctrl, pushHistory = true) {
             return;
         }
 
+        // Use the canonical source from the API response so we have its DB id
+        // (needed when creating a new mapping from the modal).
+        _currentSourceCtrl = data.source || ctrl;
+
         const fwName = ctrl.framework_short_name || data.source.framework_short_name;
         const backBtn = mappingHistory.length > 1
             ? `<button class="mapping-back-btn" id="mapping-back-btn">&#8592; Back</button>`
             : '';
-        let html = `<div class="mappings-header">${backBtn}<h2>${esc(ctrl.control_id)}</h2><span class="fw-badge">${esc(fwName)}</span></div>`;
+        let html = `<div class="mappings-header">
+            ${backBtn}
+            <h2>${esc(ctrl.control_id)}</h2>
+            <span class="fw-badge">${esc(fwName)}</span>
+            <button class="btn-secondary btn-add-mapping" id="add-mapping-btn">+ Add Mapping</button>
+        </div>`;
         html += `<div class="mappings-subtitle">${esc(data.source.title)}</div>`;
 
         if (!data.mappings || data.mappings.length === 0) {
-            html += '<div class="empty-state"><p>No mappings found for this control.</p></div>';
+            html += '<div class="empty-state"><p>No mappings found for this control. Click <strong>+ Add Mapping</strong> to create one.</p></div>';
         } else {
             const grouped = {};
             data.mappings.forEach(m => {
@@ -208,16 +327,34 @@ async function showMappings(ctrl, pushHistory = true) {
             for (const [fw, mappings] of Object.entries(grouped)) {
                 html += `<div class="mapping-group"><div class="mapping-group-title">${esc(fw)} (${mappings.length})</div>`;
                 mappings.forEach(m => {
-                    const cls = m.source_type === 'official' ? 'badge-official' : 'badge-ai';
-                    const label = m.source_type === 'official' ? 'Official' : 'AI';
+                    const cls = m.source_type === 'official' ? 'badge-official'
+                        : m.source_type === 'manual' ? 'badge-manual'
+                        : 'badge-ai';
+                    const label = m.source_type === 'official' ? 'Official'
+                        : m.source_type === 'manual' ? 'Manual'
+                        : 'AI';
                     const fwObj = frameworksCache.find(f => f.short_name === m.framework_short_name);
-                    const fwId = fwObj ? fwObj.id : '';
+                    const fwId = fwObj ? fwObj.id : (m.framework_id || '');
+                    const notesHtml = m.notes
+                        ? `<div class="mapping-notes"><strong>Note:</strong> ${esc(m.notes)}</div>`
+                        : '';
                     html += `
-                        <div class="mapping-item clickable" data-control-id="${esc(m.control_id)}" data-framework-id="${fwId}" data-framework-short-name="${esc(m.framework_short_name)}">
-                            <span class="m-id">${esc(m.control_id)}</span>
-                            <span class="badge ${cls}">${label}</span>
-                            <span class="m-title">${esc(m.title)}</span>
-                            <span class="drill-arrow">&#8594;</span>
+                        <div class="mapping-item" data-mapping-id="${m.id}">
+                            <div class="mapping-item-row">
+                                <span class="m-id mapping-drill" data-control-id="${esc(m.control_id)}" data-framework-id="${fwId}" data-framework-short-name="${esc(m.framework_short_name)}" title="Drill into this control">${esc(m.control_id)}</span>
+                                <span class="badge ${cls}">${label}</span>
+                                ${renderConfidenceChip(m.confidence)}
+                                <span class="m-title">${esc(m.title)}</span>
+                                <span class="mapping-actions">
+                                    <button class="icon-btn edit-mapping" data-mapping-id="${m.id}" title="Edit">
+                                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM12.293 4.879L4 13.172V16h2.828l8.293-8.293-2.828-2.828z"/></svg>
+                                    </button>
+                                    <button class="icon-btn icon-btn-danger delete-mapping" data-mapping-id="${m.id}" title="Delete">
+                                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"/></svg>
+                                    </button>
+                                </span>
+                            </div>
+                            ${notesHtml}
                         </div>`;
                 });
                 html += '</div>';
@@ -234,7 +371,12 @@ async function showMappings(ctrl, pushHistory = true) {
             });
         }
 
-        div.querySelectorAll('.mapping-item.clickable').forEach(el => {
+        const addBtn = document.getElementById('add-mapping-btn');
+        if (addBtn) {
+            addBtn.addEventListener('click', () => openMappingModal('add'));
+        }
+
+        div.querySelectorAll('.mapping-drill').forEach(el => {
             el.addEventListener('click', () => {
                 showMappings({
                     control_id: el.dataset.controlId,
@@ -243,9 +385,236 @@ async function showMappings(ctrl, pushHistory = true) {
                 });
             });
         });
+
+        div.querySelectorAll('.edit-mapping').forEach(el => {
+            el.addEventListener('click', () => {
+                const id = parseInt(el.dataset.mappingId);
+                const m = data.mappings.find(x => x.id === id);
+                if (m) openMappingModal('edit', m);
+            });
+        });
+
+        div.querySelectorAll('.delete-mapping').forEach(el => {
+            el.addEventListener('click', async () => {
+                const id = parseInt(el.dataset.mappingId);
+                const m = data.mappings.find(x => x.id === id);
+                const label = m ? `${m.framework_short_name} ${m.control_id}` : `mapping #${id}`;
+                if (!confirm(`Delete mapping to ${label}? This cannot be undone.`)) return;
+                try {
+                    const r = await fetch(`${API}/api/mappings/${id}`, { method: 'DELETE' });
+                    if (!r.ok && r.status !== 204) {
+                        const t = await r.text();
+                        alert(`Delete failed: ${t}`);
+                        return;
+                    }
+                    showMappings(_currentSourceCtrl, false);
+                } catch (err) {
+                    alert(`Delete failed: ${err.message}`);
+                }
+            });
+        });
     } catch (err) {
         div.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mapping Modal (add / edit)
+// ---------------------------------------------------------------------------
+
+function initMappingModal() {
+    const backdrop = document.getElementById('mapping-modal');
+    document.getElementById('mapping-modal-close').addEventListener('click', closeMappingModal);
+    document.getElementById('mapping-modal-cancel').addEventListener('click', closeMappingModal);
+    backdrop.addEventListener('click', e => {
+        if (e.target === backdrop) closeMappingModal();
+    });
+    document.getElementById('mapping-modal-save').addEventListener('click', saveMappingFromModal);
+
+    const slider = document.getElementById('mm-confidence');
+    slider.addEventListener('input', () => {
+        const v = parseFloat(slider.value);
+        document.getElementById('mm-confidence-value').textContent = v.toFixed(2);
+        const band = confidenceBand(v);
+        const chip = document.getElementById('mm-confidence-band');
+        chip.className = `confidence-chip ${band}`;
+        chip.textContent = confidenceLabel(band);
+    });
+
+    let _mmSearchDebounce = null;
+    const searchInput = document.getElementById('mm-target-search');
+    searchInput.addEventListener('input', () => {
+        clearTimeout(_mmSearchDebounce);
+        _mmSearchDebounce = setTimeout(searchTargetControls, 250);
+    });
+    document.getElementById('mm-target-fw').addEventListener('change', () => {
+        if (searchInput.value.trim()) searchTargetControls();
+    });
+}
+
+function openMappingModal(mode, ctxOrMapping) {
+    modalState.mode = mode;
+    modalState.targetCtrl = null;
+    modalState.mappingId = null;
+
+    document.getElementById('mapping-modal-error').classList.add('hidden');
+    document.getElementById('mapping-modal-title').textContent =
+        mode === 'add' ? 'Add Mapping' : 'Edit Mapping';
+
+    const sourceName = _currentSourceCtrl
+        ? `${_currentSourceCtrl.framework_short_name || ''} ${_currentSourceCtrl.control_id} — ${_currentSourceCtrl.title || ''}`
+        : '-';
+    document.getElementById('mapping-modal-source-name').textContent = sourceName.trim();
+
+    const targetPicker = document.getElementById('mapping-modal-target-picker');
+    const targetFixed = document.getElementById('mapping-modal-target-fixed');
+
+    if (mode === 'add') {
+        targetPicker.classList.remove('hidden');
+        targetFixed.classList.add('hidden');
+        document.getElementById('mm-target-search').value = '';
+        document.getElementById('mm-target-results').innerHTML = '';
+        // Default target framework to one different from source
+        const tgtSel = document.getElementById('mm-target-fw');
+        if (_currentSourceCtrl) {
+            const otherFw = frameworksCache.find(f => f.id !== _currentSourceCtrl.framework_id);
+            if (otherFw) tgtSel.value = otherFw.id;
+        }
+        document.getElementById('mm-source-type').value = 'manual';
+        document.getElementById('mm-confidence').value = '1';
+        document.getElementById('mm-notes').value = '';
+    } else {
+        const m = ctxOrMapping;
+        modalState.mappingId = m.id;
+        modalState.targetCtrl = {
+            control_id: m.control_id,
+            framework_short_name: m.framework_short_name,
+            title: m.title,
+        };
+        targetPicker.classList.add('hidden');
+        targetFixed.classList.remove('hidden');
+        document.getElementById('mapping-modal-target-name').textContent =
+            `${m.framework_short_name} ${m.control_id} — ${m.title || ''}`;
+        document.getElementById('mm-source-type').value = m.source_type || 'manual';
+        document.getElementById('mm-confidence').value = String(m.confidence ?? 1);
+        document.getElementById('mm-notes').value = m.notes || '';
+    }
+
+    // Trigger slider event to refresh the chip + value display
+    document.getElementById('mm-confidence').dispatchEvent(new Event('input'));
+
+    document.getElementById('mapping-modal').classList.remove('hidden');
+}
+
+function closeMappingModal() {
+    document.getElementById('mapping-modal').classList.add('hidden');
+}
+
+async function searchTargetControls() {
+    const fwId = document.getElementById('mm-target-fw').value;
+    const q = document.getElementById('mm-target-search').value.trim();
+    const resultsEl = document.getElementById('mm-target-results');
+    if (!q || !fwId) {
+        resultsEl.innerHTML = '';
+        return;
+    }
+    resultsEl.innerHTML = '<div class="loading">Searching</div>';
+    try {
+        const params = new URLSearchParams({ q, framework_id: fwId, limit: '20', offset: '0' });
+        const res = await fetch(`${API}/api/controls?${params.toString()}`);
+        const data = await res.json();
+        const items = data.items || [];
+        if (items.length === 0) {
+            resultsEl.innerHTML = '<div class="empty-state-sm">No matches.</div>';
+            return;
+        }
+        resultsEl.innerHTML = items.map(c => `
+            <div class="mm-target-item" data-id="${c.id}" data-control-id="${esc(c.control_id)}" data-fw="${esc(c.framework_short_name)}" data-title="${esc(c.title || '')}">
+                <span class="ctrl-id">${esc(c.control_id)}</span>
+                <span class="ctrl-title">${esc(c.title || '')}</span>
+            </div>
+        `).join('');
+        resultsEl.querySelectorAll('.mm-target-item').forEach(el => {
+            el.addEventListener('click', () => {
+                resultsEl.querySelectorAll('.mm-target-item').forEach(i => i.classList.remove('selected'));
+                el.classList.add('selected');
+                modalState.targetCtrl = {
+                    id: parseInt(el.dataset.id),
+                    control_id: el.dataset.controlId,
+                    framework_short_name: el.dataset.fw,
+                    title: el.dataset.title,
+                };
+            });
+        });
+    } catch (err) {
+        resultsEl.innerHTML = `<div class="empty-state-sm">Error: ${esc(err.message)}</div>`;
+    }
+}
+
+async function saveMappingFromModal() {
+    const errEl = document.getElementById('mapping-modal-error');
+    errEl.classList.add('hidden');
+
+    const confidence = parseFloat(document.getElementById('mm-confidence').value);
+    const sourceType = document.getElementById('mm-source-type').value;
+    const notes = document.getElementById('mm-notes').value;
+
+    const saveBtn = document.getElementById('mapping-modal-save');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    try {
+        if (modalState.mode === 'add') {
+            if (!_currentSourceCtrl || !_currentSourceCtrl.id) {
+                throw new Error('No source control selected.');
+            }
+            if (!modalState.targetCtrl || !modalState.targetCtrl.id) {
+                throw new Error('Pick a target control by searching above.');
+            }
+            const body = {
+                source_control_id: _currentSourceCtrl.id,
+                target_control_id: modalState.targetCtrl.id,
+                confidence,
+                source_type: sourceType,
+                notes,
+            };
+            const r = await fetch(`${API}/api/mappings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!r.ok) {
+                const t = await r.text();
+                throw new Error(parseErr(t) || `HTTP ${r.status}`);
+            }
+        } else {
+            const body = { confidence, source_type: sourceType, notes };
+            const r = await fetch(`${API}/api/mappings/${modalState.mappingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!r.ok) {
+                const t = await r.text();
+                throw new Error(parseErr(t) || `HTTP ${r.status}`);
+            }
+        }
+        closeMappingModal();
+        if (_currentSourceCtrl) showMappings(_currentSourceCtrl, false);
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+    }
+}
+
+function parseErr(text) {
+    try {
+        const j = JSON.parse(text);
+        return j.detail || j.error || '';
+    } catch { return text; }
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +634,20 @@ function initCoverage() {
     });
     document.getElementById('export-csv-btn').addEventListener('click', exportCoverageCSV);
     document.getElementById('export-xlsx-btn').addEventListener('click', exportCoverageExcel);
+
+    document.getElementById('table-search-input').addEventListener('input', e => {
+        tableState.search = e.target.value.trim().toLowerCase();
+        renderMappingTable(_lastCoverageTable);
+    });
+
+    document.querySelectorAll('#table-filter-chips .chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('#table-filter-chips .chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            tableState.filter = chip.dataset.filter;
+            renderMappingTable(_lastCoverageTable);
+        });
+    });
 }
 
 async function runCoverage() {
@@ -281,7 +664,7 @@ async function runCoverage() {
     const statusEl = document.getElementById('coverage-status');
     if (statusEl) statusEl.classList.add('hidden');
 
-    ['stat-total','stat-mapped','stat-unmapped','stat-percent'].forEach(id => {
+    ['stat-total', 'stat-mapped', 'stat-unmapped', 'stat-percent'].forEach(id => {
         document.getElementById(id).textContent = '...';
     });
 
@@ -313,6 +696,13 @@ async function runCoverage() {
             ? coverage.gap_controls.map(c => `<div class="detail-item coverage-link" data-id="${esc(c.id)}">${esc(c.id)}${c.title ? ` <span class="detail-title">— ${esc(c.title)}</span>` : ''}</div>`).join('')
             : '<div class="empty-state"><p>Full coverage.</p></div>';
 
+        // Reset table filters when running fresh analysis
+        tableState.search = '';
+        tableState.filter = 'all';
+        document.getElementById('table-search-input').value = '';
+        document.querySelectorAll('#table-filter-chips .chip').forEach(c =>
+            c.classList.toggle('active', c.dataset.filter === 'all'));
+
         renderMappingTable(table);
 
         document.querySelectorAll('.coverage-link').forEach(el => {
@@ -331,48 +721,130 @@ function showCoverageStatus(message, type) {
     el.classList.remove('hidden');
 }
 
+function filterTableRows(rows) {
+    return rows.filter(r => {
+        const isGap = r.source_type === 'gap';
+        if (tableState.filter === 'mapped' && isGap) return false;
+        if (tableState.filter === 'gap' && !isGap) return false;
+        if (tableState.filter === 'strong' && (isGap || (r.confidence || 0) < 0.8)) return false;
+        if (tableState.filter === 'partial' && (isGap || (r.confidence || 0) < 0.5 || (r.confidence || 0) >= 0.8)) return false;
+        if (tableState.filter === 'weak' && (isGap || (r.confidence || 0) === 0 || (r.confidence || 0) >= 0.5)) return false;
+
+        if (tableState.search) {
+            const haystack = [r.source_id, r.source_title, r.target_id, r.target_title, r.notes]
+                .map(s => (s || '').toString().toLowerCase()).join(' ');
+            if (!haystack.includes(tableState.search)) return false;
+        }
+        return true;
+    });
+}
+
+function sortTableRows(rows) {
+    const { sortKey, sortDir } = tableState;
+    const dir = sortDir === 'desc' ? -1 : 1;
+    const copy = [...rows];
+    copy.sort((a, b) => {
+        let av = a[sortKey];
+        let bv = b[sortKey];
+        if (sortKey === 'confidence') {
+            av = Number(av) || 0;
+            bv = Number(bv) || 0;
+        } else {
+            av = (av ?? '').toString().toLowerCase();
+            bv = (bv ?? '').toString().toLowerCase();
+        }
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
+    });
+    return copy;
+}
+
 function renderMappingTable(table) {
     const container = document.getElementById('mapping-table-container');
-    if (!table.rows || table.rows.length === 0) {
+    const countEl = document.getElementById('table-row-count');
+
+    if (!table || !table.rows || table.rows.length === 0) {
         container.innerHTML = '<div class="empty-state"><p>No data.</p></div>';
+        if (countEl) countEl.textContent = '';
         return;
     }
 
-    let html = `<table>
-        <thead><tr>
-            <th>${esc(table.source_framework)}</th>
-            <th>Title</th>
-            <th>${esc(table.target_framework)}</th>
-            <th>Title</th>
-            <th>Type</th>
-        </tr></thead><tbody>`;
+    const filtered = filterTableRows(table.rows);
+    const sorted = sortTableRows(filtered);
+    if (countEl) countEl.textContent = `(${sorted.length} of ${table.rows.length})`;
 
-    table.rows.forEach(r => {
+    if (sorted.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>No rows match the current filter.</p></div>';
+        return;
+    }
+
+    const headerCols = [
+        { key: 'source_id', label: esc(table.source_framework) },
+        { key: 'source_title', label: 'Title' },
+        { key: 'target_id', label: esc(table.target_framework) },
+        { key: 'target_title', label: 'Title' },
+        { key: 'source_type', label: 'Type' },
+        { key: 'confidence', label: 'Confidence' },
+    ];
+
+    let html = '<table><thead><tr>';
+    headerCols.forEach(col => {
+        const active = tableState.sortKey === col.key;
+        const arrow = active ? (tableState.sortDir === 'asc' ? '▲' : '▼') : '';
+        html += `<th class="sortable ${active ? 'active' : ''}" data-key="${col.key}">${col.label} <span class="sort-arrow">${arrow}</span></th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    sorted.forEach(r => {
         const isGap = r.source_type === 'gap';
+        const typeBadge = isGap
+            ? `<span class="badge">gap</span>`
+            : `<span class="badge ${r.source_type === 'official' ? 'badge-official' : (r.source_type === 'manual' ? 'badge-manual' : 'badge-ai')}">${esc(r.source_type)}</span>`;
         html += `<tr>
             <td>${esc(r.source_id)}</td>
             <td>${esc(r.source_title)}</td>
             <td class="${isGap ? 'gap' : ''}">${isGap ? 'No mapping' : esc(r.target_id)}</td>
             <td>${esc(r.target_title)}</td>
-            <td><span class="badge ${isGap ? '' : 'badge-official'}">${esc(r.source_type)}</span></td>
+            <td>${typeBadge}</td>
+            <td>${isGap ? '<span class="confidence-chip none">—</span>' : renderConfidenceChip(r.confidence)}</td>
         </tr>`;
     });
 
     container.innerHTML = html + '</tbody></table>';
+
+    container.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            const key = th.dataset.key;
+            if (tableState.sortKey === key) {
+                tableState.sortDir = tableState.sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                tableState.sortKey = key;
+                tableState.sortDir = 'asc';
+            }
+            renderMappingTable(_lastCoverageTable);
+        });
+    });
 }
 
 function exportCoverageCSV() {
     if (!_lastCoverageTable || !_lastCoverageTable.rows) return;
-    const { source_framework, target_framework, rows } = _lastCoverageTable;
-    const header = [source_framework, 'Source Title', target_framework, 'Target Title', 'Type'];
-    const lines = [header.join(',')];
+    const { source_framework, target_framework } = _lastCoverageTable;
+    const rows = sortTableRows(filterTableRows(_lastCoverageTable.rows));
+    const header = [source_framework, 'Source Title', target_framework, 'Target Title', 'Type', 'Confidence', 'Strength', 'Notes'];
+    const lines = [header.map(JSON.stringify).join(',')];
     rows.forEach(r => {
+        const band = confidenceBand(r.confidence);
+        const strength = r.source_type === 'gap' ? '' : confidenceLabel(band);
         lines.push([
-            JSON.stringify(r.source_id),
-            JSON.stringify(r.source_title),
+            JSON.stringify(r.source_id || ''),
+            JSON.stringify(r.source_title || ''),
             JSON.stringify(r.target_id || 'No mapping'),
-            JSON.stringify(r.target_title),
-            JSON.stringify(r.source_type),
+            JSON.stringify(r.target_title || ''),
+            JSON.stringify(r.source_type || ''),
+            JSON.stringify(((r.confidence || 0).toFixed(2))),
+            JSON.stringify(strength),
+            JSON.stringify(r.notes || ''),
         ].join(','));
     });
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -392,6 +864,9 @@ function exportCoverageExcel() {
 }
 
 
+// ---------------------------------------------------------------------------
+// Versions
+// ---------------------------------------------------------------------------
 
 function initVersions() {
     document.getElementById('version-fw').addEventListener('change', loadTransitions);
@@ -635,8 +1110,8 @@ function showStatus(message, type) {
 // ---------------------------------------------------------------------------
 
 function esc(str) {
-    if (!str) return '';
+    if (str === undefined || str === null) return '';
     const d = document.createElement('div');
-    d.textContent = str;
+    d.textContent = String(str);
     return d.innerHTML;
 }

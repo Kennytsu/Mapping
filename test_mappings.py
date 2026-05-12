@@ -56,12 +56,16 @@ def test_framework_counts():
 
 def test_search_exact_match():
     print("\n--- Search exact match ordering ---")
-    results = get("/api/controls?q=A.5.1")
-    check("Search A.5.1 returns results", len(results) > 0)
-    if results:
+    data = get("/api/controls?q=A.5.1")
+    items = data.get("items", [])
+    check("Search A.5.1 returns results", len(items) > 0)
+    check("Search response includes total field",
+          "total" in data and isinstance(data["total"], int),
+          f"got keys {list(data.keys())}")
+    if items:
         check("Exact match A.5.1 is first result",
-              results[0]["control_id"] == "A.5.1",
-              f"first was {results[0]['control_id']}")
+              items[0]["control_id"] == "A.5.1",
+              f"first was {items[0]['control_id']}")
 
 
 def test_c5_to_iso_mappings(fw_map: dict):
@@ -134,7 +138,8 @@ def test_coverage(fw_map: dict):
 def test_clause_titles(fw_map: dict):
     """Verify ISO clause controls have real titles (not placeholders)."""
     print("\n--- ISO clause titles ---")
-    results = get("/api/controls?q=4.1&framework_id=" + str(fw_map["ISO27001"]["id"]))
+    data = get("/api/controls?q=4.1&framework_id=" + str(fw_map["ISO27001"]["id"]))
+    results = data.get("items", [])
     clause_41 = [r for r in results if r["control_id"] == "4.1"]
     if clause_41:
         title = clause_41[0]["title"]

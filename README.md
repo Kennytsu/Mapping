@@ -29,11 +29,13 @@ flowchart TB
 
 | Feature | Description |
 |---------|-------------|
-| **Control Lookup** | Search any control ID or keyword, view bidirectional mappings across all frameworks. Click a mapped control to drill into its own mappings. |
-| **Coverage Analysis** | Compare two frameworks: coverage percentage, gap list, unmapped controls, full mapping table. |
+| **Control Lookup** | Search any control ID or keyword with **paginated results** (25 / 50 / 100 per page). Bidirectional mappings across all frameworks. Click a mapped control ID to drill into its own mappings. |
+| **Mapping Editor** | **Add, edit, and delete** mappings directly in the UI. Per-mapping confidence slider, source-type (Official / Manual / AI), and reviewer notes. |
+| **Confidence Bands** | Every mapping now shows a colored chip — **Strong (≥80%)**, **Partial (50-80%)**, **Weak (<50%)** — visible in the lookup, coverage table, and CSV / Excel exports. |
+| **Coverage Analysis** | Compare two frameworks: coverage percentage, gap list, unmapped controls, full mapping table with **search, filter chips (All / Mapped / Gaps / Strong / Partial / Weak), and sortable columns**. |
 | **Version Tracking** | Track changes between framework versions (added, modified, renamed, removed controls). |
 | **Document Upload** | Upload new mapping documents (PDF, Excel, CSV) with explicit source/target framework and year selection. |
-| **Excel Export** | Download a styled Excel audit report with summary, full mapping table, unmapped controls, and target gaps. |
+| **Excel Export** | Download a styled Excel audit report with summary, full mapping table (now including confidence + strength + notes), unmapped controls, and target gaps. |
 | **BSI-Standard Refs** | Parses both IT-Grundschutz requirement IDs (e.g. `ISMS.1.A3`) and BSI-Standard document references (e.g. `BSI-Standard 200-2, Kapitel 9`). |
 | **API Docs** | Auto-generated Swagger UI at `/docs`. |
 
@@ -123,11 +125,14 @@ podman exec compliance-app python seed_data.py \
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/frameworks` | List all frameworks with control counts |
-| GET | `/api/controls?q=&framework_id=` | Search controls by ID or keyword |
-| GET | `/api/mappings/{control_id}?framework_id=` | Bidirectional mappings for a control |
+| GET | `/api/controls?q=&framework_id=&limit=&offset=` | **Paginated** control search — returns `{ total, limit, offset, items }` |
+| GET | `/api/mappings/{control_id}?framework_id=` | Bidirectional mappings for a control (now includes mapping `id`, `confidence`, `notes`) |
+| POST | `/api/mappings` | **Create** a manual mapping between two existing controls |
+| PATCH | `/api/mappings/{id}` | **Update** a mapping's confidence, source_type, or notes |
+| DELETE | `/api/mappings/{id}` | **Delete** a mapping |
 | GET | `/api/coverage?source=&target=` | Coverage stats between two frameworks |
-| GET | `/api/coverage/table?source=&target=` | Full mapping table for export |
-| GET | `/api/coverage/export?source=&target=` | Download Excel audit report (.xlsx) |
+| GET | `/api/coverage/table?source=&target=` | Full mapping table (rows include `mapping_id`, `confidence`, `notes`) |
+| GET | `/api/coverage/export?source=&target=` | Download Excel audit report with confidence + strength + notes columns |
 | GET | `/api/versions/{fw}/transitions` | Available version transitions |
 | GET | `/api/versions/{fw}/changes?from=&to=` | Version change details |
 | POST | `/api/upload` | Parse a document (returns preview) |
