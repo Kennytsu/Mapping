@@ -48,6 +48,10 @@
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"/></svg>
                 Upload
             </button>
+            <button class="tab" data-tab="compliance" role="tab">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5C17.944 5.66 18 6.324 18 7c0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.676.056-1.34.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Compliance
+            </button>
         </nav>
 
         <main class="content">
@@ -272,6 +276,84 @@
                     </div>
                 </div>
                 <div id="import-status" class="status hidden"></div>
+            </section>
+
+            <!-- Compliance Checking -->
+            <section id="compliance" class="tab-panel">
+                <div class="panel-header">
+                    <h2>Compliance Analysis</h2>
+                    <p>Upload regulations, extract structured tuples, and check business processes for compliance.</p>
+                </div>
+
+                <div class="compliance-grid">
+                    <!-- Left column: Regulation Management -->
+                    <div class="compliance-col">
+                        <div class="card">
+                            <h3>Upload Regulation</h3>
+                            <div class="field">
+                                <label for="reg-name">Regulation Name</label>
+                                <input type="text" id="reg-name" placeholder="e.g. General Data Protection Regulation">
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="reg-short">Short Name</label>
+                                    <input type="text" id="reg-short" placeholder="e.g. GDPR">
+                                </div>
+                                <div class="field">
+                                    <label for="reg-jurisdiction">Jurisdiction</label>
+                                    <input type="text" id="reg-jurisdiction" placeholder="e.g. EU">
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="reg-text">Regulation Text</label>
+                                <textarea id="reg-text" rows="8" placeholder="Paste the regulatory text here..."></textarea>
+                            </div>
+                            <button id="reg-upload-btn" class="btn-primary">Upload &amp; Analyze</button>
+                            <div id="reg-upload-status" class="status hidden"></div>
+                        </div>
+
+                        <div class="card">
+                            <h3>Uploaded Regulations</h3>
+                            <div id="reg-list" class="reg-list">
+                                <p class="muted">No regulations uploaded yet.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right column: Compliance Check + Results -->
+                    <div class="compliance-col">
+                        <div class="card">
+                            <h3>Compliance Check</h3>
+                            <div class="field">
+                                <label for="check-regulation">Select Regulation</label>
+                                <select id="check-regulation">
+                                    <option value="">-- Upload a regulation first --</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="check-business-text">Business Process / Privacy Policy</label>
+                                <textarea id="check-business-text" rows="8" placeholder="Paste the business process text or privacy policy to check..."></textarea>
+                            </div>
+                            <button id="check-run-btn" class="btn-primary">Run Compliance Check</button>
+                            <div id="check-status" class="status hidden"></div>
+                        </div>
+
+                        <div class="card" id="check-results-card" style="display:none;">
+                            <h3>Results</h3>
+                            <div id="check-results" class="check-results"></div>
+                        </div>
+
+                        <div class="card" id="tuples-card" style="display:none;">
+                            <h3>Extracted Tuples</h3>
+                            <div id="tuples-list" class="tuples-list"></div>
+                        </div>
+
+                        <div class="card" id="graph-card" style="display:none;">
+                            <h3>Eventic Graph</h3>
+                            <div id="graph-viz" class="graph-viz"></div>
+                        </div>
+                    </div>
+                </div>
             </section>
         </main>
     </div>

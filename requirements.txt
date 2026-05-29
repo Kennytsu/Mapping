@@ -10,3 +10,19 @@ openpyxl>=3.1.0
 pdfplumber>=0.10.0
 python-multipart>=0.0.18
 pgvector>=0.3.0
+
+# NLP (ARC pipeline)
+spacy>=3.7.0
+sentence-transformers>=2.2.0
+
+# Knowledge Graph (eventic graph)
+networkx>=3.0
+
+# LLM (compliance reasoning - optional)
+openai>=1.0.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+httpx>=0.24.0
+aiosqlite>=0.19.0

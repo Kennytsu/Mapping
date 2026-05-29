@@ -937,6 +937,273 @@ async def delete_mapping(
 
 
 # ---------------------------------------------------------------------------
+# Compliance Checking API (ARC + RAG frameworks)
+# ---------------------------------------------------------------------------
+
+class RegulationUpload(BaseModel):
+    name: str
+    short_name: str
+    version: str = ""
+    jurisdiction: str = ""
+    full_text: str = ""
+    language: str = "en"
+
+
+class RegulationOut(BaseModel):
+    id: int
+    name: str
+    short_name: str
+    version: str
+    jurisdiction: str
+    language: str
+
+
+class ComplianceCheckRequest(BaseModel):
+    regulation_id: int
+    business_text: str
+
+
+class EventicGraphRequest(BaseModel):
+    regulation_id: int
+
+
+@app.post("/api/regulations/upload", response_model=RegulationOut)
+async def upload_regulation(
+    body: RegulationUpload,
+    session: AsyncSession = Depends(get_session),
+):
+    """Upload a regulation document for analysis."""
+    from database import RegulationDocument
+    doc = RegulationDocument(
+        name=body.name,
+        short_name=body.short_name,
+        version=body.version,
+        jurisdiction=body.jurisdiction,
+        full_text=body.full_text,
+        language=body.language,
+    )
+    session.add(doc)
+    await session.commit()
+    await session.refresh(doc)
+    return RegulationOut(
+        id=doc.id, name=doc.name, short_name=doc.short_name,
+        version=doc.version or "", jurisdiction=doc.jurisdiction or "",
+        language=doc.language or "en",
+    )
+
+
+@app.get("/api/regulations", response_model=list[RegulationOut])
+async def list_regulations(session: AsyncSession = Depends(get_session)):
+    """List all uploaded regulation documents."""
+    from database import RegulationDocument
+    stmt = select(RegulationDocument).order_by(RegulationDocument.id)
+    rows = (await session.execute(stmt)).scalars().all()
+    return [
+        RegulationOut(
+            id=r.id, name=r.name, short_name=r.short_name,
+            version=r.version or "", jurisdiction=r.jurisdiction or "",
+            language=r.language or "en",
+        )
+        for r in rows
+    ]
+
+
+@app.post("/api/regulations/{reg_id}/extract-tuples")
+async def extract_regulation_tuples(
+    reg_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Run ARC pipeline to extract tuples from a regulation."""
+    from database import RegulationDocument, ArcTuple
+    from arc_pipeline import process_regulation
+
+    doc = (await session.execute(
+        select(RegulationDocument).where(RegulationDocument.id == reg_id)
+    )).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Regulation not found")
+
+    tuples = process_regulation(doc.full_text)
+
+    db_tuples = []
+    for t in tuples:
+        arc = ArcTuple(
+            regulation_id=reg_id,
+            tuple_type=t["tuple_type"],
+            source_statement=t.get("source_statement", ""),
+            verb=t.get("verb", ""),
+            deontic_modal=t.get("deontic_modal", ""),
+            sender_phrase=t.get("sender_phrase", ""),
+            sender_clause=t.get("sender_clause", ""),
+            receiver_phrase=t.get("receiver_phrase", ""),
+            receiver_clause=t.get("receiver_clause", ""),
+            data_phrase=t.get("data_phrase", ""),
+            data_clause=t.get("data_clause", ""),
+            transmission_principle=t.get("transmission_principle", ""),
+            definiendum=t.get("definiendum", ""),
+            definiens=t.get("definiens", ""),
+            right_entity=t.get("right_entity", ""),
+            right_statement=t.get("right_statement", ""),
+        )
+        session.add(arc)
+        db_tuples.append(t)
+
+    await session.commit()
+
+    return {"regulation_id": reg_id, "tuples": db_tuples, "count": len(db_tuples)}
+
+
+@app.get("/api/regulations/{reg_id}/tuples")
+async def get_regulation_tuples(
+    reg_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """List extracted ARC tuples for a regulation."""
+    from database import RegulationDocument, ArcTuple
+
+    doc = (await session.execute(
+        select(RegulationDocument).where(RegulationDocument.id == reg_id)
+    )).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Regulation not found")
+
+    stmt = select(ArcTuple).where(ArcTuple.regulation_id == reg_id)
+    rows = (await session.execute(stmt)).scalars().all()
+
+    tuples = []
+    for r in rows:
+        tuples.append({
+            "id": r.id,
+            "tuple_type": r.tuple_type,
+            "verb": r.verb,
+            "deontic_modal": r.deontic_modal,
+            "source_statement": r.source_statement,
+        })
+
+    return {"regulation_id": reg_id, "tuples": tuples, "count": len(tuples)}
+
+
+@app.post("/api/compliance/check")
+async def run_compliance_check(
+    body: ComplianceCheckRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Run RAG-based compliance check against a regulation."""
+    from database import RegulationDocument
+    from compliance_checker import check_compliance
+
+    doc = (await session.execute(
+        select(RegulationDocument).where(RegulationDocument.id == body.regulation_id)
+    )).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Regulation not found")
+
+    results = check_compliance(
+        business_text=body.business_text,
+        regulation_text=doc.full_text,
+    )
+
+    return {"regulation_id": body.regulation_id, "results": results}
+
+
+@app.post("/api/eventic-graph/build")
+async def build_eventic_graph_endpoint(
+    body: EventicGraphRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Build eventic graph from a regulation's deontic propositions."""
+    from database import RegulationDocument
+    from dynamic_layer import extract_deontic_propositions, build_eventic_graph, serialize_graph
+
+    doc = (await session.execute(
+        select(RegulationDocument).where(RegulationDocument.id == body.regulation_id)
+    )).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Regulation not found")
+
+    propositions = extract_deontic_propositions(doc.full_text)
+    graph = build_eventic_graph(propositions)
+    serialized = serialize_graph(graph)
+
+    return {
+        "regulation_id": body.regulation_id,
+        "nodes": serialized["nodes"],
+        "edges": serialized["edges"],
+        "proposition_count": len(propositions),
+    }
+
+
+@app.get("/api/regulations/compare")
+async def compare_regulations(
+    reg_id_1: int = Query(..., description="First regulation ID"),
+    reg_id_2: int = Query(..., description="Second regulation ID"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Compare two regulations using ARCBert phrase similarity."""
+    from database import RegulationDocument
+    from arc_pipeline import process_regulation, phrase_similarity
+
+    doc1 = (await session.execute(
+        select(RegulationDocument).where(RegulationDocument.id == reg_id_1)
+    )).scalar_one_or_none()
+    doc2 = (await session.execute(
+        select(RegulationDocument).where(RegulationDocument.id == reg_id_2)
+    )).scalar_one_or_none()
+
+    if not doc1 or not doc2:
+        raise HTTPException(404, "One or both regulations not found")
+
+    tuples1 = process_regulation(doc1.full_text)
+    tuples2 = process_regulation(doc2.full_text)
+
+    if not tuples1 or not tuples2:
+        return {
+            "reg_id_1": reg_id_1,
+            "reg_id_2": reg_id_2,
+            "similarity_score": 0.0,
+            "matching_pairs": [],
+        }
+
+    # Compare statements from both regulations
+    matching_pairs = []
+    total_sim = 0.0
+    pair_count = 0
+
+    for t1 in tuples1[:10]:  # limit for performance
+        best_score = 0.0
+        best_match = None
+        stmt1 = t1.get("source_statement", "")
+        if not stmt1:
+            continue
+        for t2 in tuples2[:10]:
+            stmt2 = t2.get("source_statement", "")
+            if not stmt2:
+                continue
+            sim = phrase_similarity(stmt1, stmt2)
+            if sim > best_score:
+                best_score = sim
+                best_match = t2
+
+        if best_match and best_score > 0.3:
+            matching_pairs.append({
+                "reg1_statement": stmt1,
+                "reg2_statement": best_match.get("source_statement", ""),
+                "similarity": round(best_score, 4),
+            })
+            total_sim += best_score
+            pair_count += 1
+
+    avg_sim = total_sim / pair_count if pair_count > 0 else 0.0
+
+    return {
+        "reg_id_1": reg_id_1,
+        "reg_id_2": reg_id_2,
+        "similarity_score": round(avg_sim, 4),
+        "matching_pairs": matching_pairs,
+    }
+
+
+# ---------------------------------------------------------------------------
 # AI module skeleton endpoints
 # ---------------------------------------------------------------------------
 

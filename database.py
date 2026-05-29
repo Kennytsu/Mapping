@@ -1,9 +1,11 @@
 """Database setup with SQLAlchemy async engine for PostgreSQL."""
 
 import os
+from datetime import datetime, timezone
+
 from sqlalchemy import (
     Column, Integer, String, Float, Text, Boolean, ForeignKey, UniqueConstraint,
-    create_engine, text,
+    DateTime, create_engine, text,
 )
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
@@ -93,6 +95,155 @@ class VersionChange(Base):
     category = Column(String(100), default="")
 
     framework = relationship("Framework")
+
+
+# ---------------------------------------------------------------------------
+# Compliance Checking Models (ARC + RAG frameworks)
+# ---------------------------------------------------------------------------
+
+
+class RegulationDocument(Base):
+    __tablename__ = "regulation_documents"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    short_name = Column(String(100), nullable=False)
+    version = Column(String(50), default="")
+    jurisdiction = Column(String(200), default="")
+    full_text = Column(Text, default="")
+    language = Column(String(10), default="en")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    tuples = relationship("ArcTuple", back_populates="regulation", cascade="all, delete-orphan")
+    eventic_nodes = relationship("EventicGraphNode", back_populates="regulation", cascade="all, delete-orphan")
+    term_definitions = relationship("TermDefinition", back_populates="regulation", cascade="all, delete-orphan")
+
+
+class ArcTuple(Base):
+    """Structured representation of regulatory statements (ARC framework).
+
+    Three types: data_flow, definition, right.
+    """
+    __tablename__ = "arc_tuples"
+
+    id = Column(Integer, primary_key=True)
+    regulation_id = Column(Integer, ForeignKey("regulation_documents.id"), nullable=False)
+    tuple_type = Column(String(20), nullable=False)  # data_flow | definition | right
+    source_statement = Column(Text, default="")
+    verb = Column(String(100), default="")
+    deontic_modal = Column(String(50), default="")  # obligation | permission | prohibition
+
+    # Data Flow Tuple attributes (CI framework)
+    sender_phrase = Column(Text, default="")
+    sender_clause = Column(Text, default="")
+    receiver_phrase = Column(Text, default="")
+    receiver_clause = Column(Text, default="")
+    data_phrase = Column(Text, default="")
+    data_clause = Column(Text, default="")
+    transmission_principle = Column(Text, default="")
+
+    # Definition Tuple attributes
+    definiendum = Column(Text, default="")  # term being defined
+    definiens = Column(Text, default="")    # description/definition
+
+    # Right Tuple attributes
+    right_entity = Column(Text, default="")
+    right_statement = Column(Text, default="")
+
+    regulation = relationship("RegulationDocument", back_populates="tuples")
+
+
+class EventicGraphNode(Base):
+    """Nodes in the eventic knowledge graph (RAG framework dynamic layer).
+
+    Node types: organization, person, regulatory_document, category, action, state.
+    """
+    __tablename__ = "eventic_graph_nodes"
+
+    id = Column(Integer, primary_key=True)
+    regulation_id = Column(Integer, ForeignKey("regulation_documents.id"), nullable=True)
+    node_type = Column(String(50), nullable=False)
+    text = Column(Text, nullable=False)
+    embedding = Column(Vector(768), nullable=True) if Vector else Column(Text, nullable=True)
+
+    regulation = relationship("RegulationDocument", back_populates="eventic_nodes")
+    outgoing_edges = relationship(
+        "EventicGraphEdge", foreign_keys="EventicGraphEdge.source_node_id",
+        back_populates="source_node", cascade="all, delete-orphan",
+    )
+    incoming_edges = relationship(
+        "EventicGraphEdge", foreign_keys="EventicGraphEdge.target_node_id",
+        back_populates="target_node", cascade="all, delete-orphan",
+    )
+
+
+class EventicGraphEdge(Base):
+    """Edges in the eventic knowledge graph.
+
+    Relation types: publish, work_for, duty, prohibited, right, classified_to, cite.
+    """
+    __tablename__ = "eventic_graph_edges"
+
+    id = Column(Integer, primary_key=True)
+    source_node_id = Column(Integer, ForeignKey("eventic_graph_nodes.id"), nullable=False)
+    target_node_id = Column(Integer, ForeignKey("eventic_graph_nodes.id"), nullable=False)
+    relation_type = Column(String(50), nullable=False)
+
+    source_node = relationship("EventicGraphNode", foreign_keys=[source_node_id], back_populates="outgoing_edges")
+    target_node = relationship("EventicGraphNode", foreign_keys=[target_node_id], back_populates="incoming_edges")
+
+
+class TermDefinition(Base):
+    """Term definitions extracted from regulatory documents (static layer)."""
+    __tablename__ = "term_definitions"
+
+    id = Column(Integer, primary_key=True)
+    regulation_id = Column(Integer, ForeignKey("regulation_documents.id"), nullable=False)
+    term = Column(String(500), nullable=False)
+    definition = Column(Text, nullable=False)
+    embedding = Column(Vector(768), nullable=True) if Vector else Column(Text, nullable=True)
+
+    regulation = relationship("RegulationDocument", back_populates="term_definitions")
+
+
+class BusinessProcessDocument(Base):
+    """Business process documents to check for compliance."""
+    __tablename__ = "business_process_documents"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    full_text = Column(Text, default="")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    chunks = relationship("BusinessProcessChunk", back_populates="document", cascade="all, delete-orphan")
+
+
+class BusinessProcessChunk(Base):
+    """Chunked business process text with embeddings for vector search."""
+    __tablename__ = "business_process_chunks"
+
+    id = Column(Integer, primary_key=True)
+    document_id = Column(Integer, ForeignKey("business_process_documents.id"), nullable=False)
+    text = Column(Text, nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    embedding = Column(Vector(768), nullable=True) if Vector else Column(Text, nullable=True)
+
+    document = relationship("BusinessProcessDocument", back_populates="chunks")
+
+
+class ComplianceCheck(Base):
+    """Results of compliance checking (computational layer output)."""
+    __tablename__ = "compliance_checks"
+
+    id = Column(Integer, primary_key=True)
+    business_process_chunk = Column(Text, nullable=False)
+    regulation_id = Column(Integer, ForeignKey("regulation_documents.id"), nullable=False)
+    result = Column(String(20), nullable=False)  # compliant | non_compliant | undetermined
+    explanation = Column(Text, default="")
+    conflicting_triples = Column(Text, default="")  # JSON of conflicting knowledge
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    regulation = relationship("RegulationDocument")
 
 
 async def ensure_pgvector():

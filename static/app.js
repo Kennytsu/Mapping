@@ -1115,3 +1115,228 @@ function esc(str) {
     d.textContent = String(str);
     return d.innerHTML;
 }
+
+
+// ---------------------------------------------------------------------------
+// Compliance Tab
+// ---------------------------------------------------------------------------
+
+(function() {
+    const uploadBtn = document.getElementById('reg-upload-btn');
+    const checkBtn = document.getElementById('check-run-btn');
+
+    if (!uploadBtn) return;
+
+    let regulations = [];
+
+    uploadBtn.addEventListener('click', uploadRegulation);
+    checkBtn.addEventListener('click', runComplianceCheck);
+
+    loadRegulations();
+
+    async function loadRegulations() {
+        try {
+            const resp = await fetch('/api/regulations');
+            regulations = await resp.json();
+            renderRegList();
+            updateRegSelect();
+        } catch(e) {}
+    }
+
+    async function uploadRegulation() {
+        const name = document.getElementById('reg-name').value.trim();
+        const shortName = document.getElementById('reg-short').value.trim();
+        const jurisdiction = document.getElementById('reg-jurisdiction').value.trim();
+        const fullText = document.getElementById('reg-text').value.trim();
+
+        if (!name || !shortName || !fullText) {
+            showComplianceStatus('reg-upload-status', 'Please fill in name, short name, and text.', 'error');
+            return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Analyzing...';
+
+        try {
+            const resp = await fetch('/api/regulations/upload', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, short_name: shortName, jurisdiction, full_text: fullText}),
+            });
+            const reg = await resp.json();
+
+            // Extract tuples
+            const tupleResp = await fetch(`/api/regulations/${reg.id}/extract-tuples`, {method: 'POST'});
+            const tupleData = await tupleResp.json();
+
+            // Build eventic graph
+            const graphResp = await fetch('/api/eventic-graph/build', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({regulation_id: reg.id}),
+            });
+            const graphData = await graphResp.json();
+
+            showComplianceStatus('reg-upload-status',
+                `Uploaded "${shortName}" - extracted ${tupleData.count} tuples, built graph with ${graphData.nodes.length} nodes.`, 'success');
+
+            renderTuples(tupleData.tuples);
+            renderGraph(graphData);
+
+            await loadRegulations();
+
+            document.getElementById('reg-name').value = '';
+            document.getElementById('reg-short').value = '';
+            document.getElementById('reg-jurisdiction').value = '';
+            document.getElementById('reg-text').value = '';
+        } catch(e) {
+            showComplianceStatus('reg-upload-status', 'Upload failed: ' + e.message, 'error');
+        } finally {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload & Analyze';
+        }
+    }
+
+    async function runComplianceCheck() {
+        const regId = document.getElementById('check-regulation').value;
+        const businessText = document.getElementById('check-business-text').value.trim();
+
+        if (!regId || !businessText) {
+            showComplianceStatus('check-status', 'Select a regulation and enter business text.', 'error');
+            return;
+        }
+
+        checkBtn.disabled = true;
+        checkBtn.textContent = 'Checking...';
+
+        try {
+            const resp = await fetch('/api/compliance/check', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({regulation_id: parseInt(regId), business_text: businessText}),
+            });
+            const data = await resp.json();
+
+            renderCheckResults(data.results);
+            showComplianceStatus('check-status', `Analysis complete - ${data.results.length} chunks evaluated.`, 'success');
+        } catch(e) {
+            showComplianceStatus('check-status', 'Check failed: ' + e.message, 'error');
+        } finally {
+            checkBtn.disabled = false;
+            checkBtn.textContent = 'Run Compliance Check';
+        }
+    }
+
+    function renderRegList() {
+        const el = document.getElementById('reg-list');
+        if (!regulations.length) {
+            el.innerHTML = '<p class="muted">No regulations uploaded yet.</p>';
+            return;
+        }
+        el.innerHTML = regulations.map(r => `
+            <div class="reg-item" data-id="${r.id}">
+                <span class="reg-short">${esc(r.short_name)}</span>
+                <span class="reg-meta">${esc(r.name)} ${r.jurisdiction ? '(' + esc(r.jurisdiction) + ')' : ''}</span>
+            </div>
+        `).join('');
+
+        el.querySelectorAll('.reg-item').forEach(item => {
+            item.addEventListener('click', () => viewRegTuples(item.dataset.id));
+        });
+    }
+
+    function updateRegSelect() {
+        const sel = document.getElementById('check-regulation');
+        sel.innerHTML = '<option value="">-- Select regulation --</option>' +
+            regulations.map(r => `<option value="${r.id}">${esc(r.short_name)} - ${esc(r.name)}</option>`).join('');
+    }
+
+    async function viewRegTuples(regId) {
+        try {
+            const resp = await fetch(`/api/regulations/${regId}/tuples`);
+            const data = await resp.json();
+            renderTuples(data.tuples);
+
+            const graphResp = await fetch('/api/eventic-graph/build', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({regulation_id: parseInt(regId)}),
+            });
+            const graphData = await graphResp.json();
+            renderGraph(graphData);
+        } catch(e) {}
+    }
+
+    function renderTuples(tuples) {
+        const card = document.getElementById('tuples-card');
+        const el = document.getElementById('tuples-list');
+        card.style.display = 'block';
+
+        if (!tuples || !tuples.length) {
+            el.innerHTML = '<p class="muted">No tuples extracted.</p>';
+            return;
+        }
+
+        el.innerHTML = tuples.map(t => `
+            <div class="tuple-item">
+                <span class="tuple-type ${t.tuple_type}">${t.tuple_type}</span>
+                ${t.deontic_modal ? `<span class="tuple-type">${t.deontic_modal}</span>` : ''}
+                <div style="margin-top:4px;">${esc(t.source_statement || '')}</div>
+                ${t.verb ? `<div style="color:#6b7280;font-size:0.7rem;margin-top:2px;">verb: <b>${esc(t.verb)}</b></div>` : ''}
+            </div>
+        `).join('');
+    }
+
+    function renderGraph(data) {
+        const card = document.getElementById('graph-card');
+        const el = document.getElementById('graph-viz');
+        card.style.display = 'block';
+
+        if (!data.nodes || !data.nodes.length) {
+            el.innerHTML = '<p class="muted">No graph data.</p>';
+            return;
+        }
+
+        let html = '<div style="margin-bottom:8px;font-weight:600;">Nodes</div>';
+        html += data.nodes.map(n =>
+            `<span class="graph-node ${n.node_type}">${esc(n.text)}</span>`
+        ).join('');
+
+        html += '<div style="margin-top:12px;margin-bottom:8px;font-weight:600;">Edges</div>';
+        const nodeMap = {};
+        data.nodes.forEach(n => nodeMap[n.id] = n.text);
+
+        html += data.edges.map(e =>
+            `<div class="graph-edge"><b>${esc(nodeMap[e.source] || '?')}</b> &mdash;<i>${esc(e.relation)}</i>&mdash;&gt; <b>${esc(nodeMap[e.target] || '?')}</b></div>`
+        ).join('');
+
+        el.innerHTML = html;
+    }
+
+    function renderCheckResults(results) {
+        const card = document.getElementById('check-results-card');
+        const el = document.getElementById('check-results');
+        card.style.display = 'block';
+
+        if (!results.length) {
+            el.innerHTML = '<p class="muted">No results.</p>';
+            return;
+        }
+
+        el.innerHTML = results.map(r => `
+            <div class="check-result-item ${r.result}">
+                <span class="result-badge">${r.result.replace('_', ' ')}</span>
+                <div class="result-chunk">"${esc(r.chunk.substring(0, 150))}${r.chunk.length > 150 ? '...' : ''}"</div>
+                <div class="result-explanation">${esc(r.explanation)}</div>
+            </div>
+        `).join('');
+    }
+
+    function showComplianceStatus(id, message, type) {
+        const el = document.getElementById(id);
+        el.textContent = message;
+        el.className = `status ${type}`;
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 8000);
+    }
+})();
