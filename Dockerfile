@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     python -m spacy download en_core_web_sm
 
 COPY app.py database.py document_parser.py seed_data.py ./
-COPY arc_pipeline.py static_layer.py dynamic_layer.py compliance_checker.py ./
+COPY arc_pipeline.py static_layer.py dynamic_layer.py compliance_checker.py mapping_engine.py ./
 COPY static/ ./static/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./

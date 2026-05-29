@@ -1203,6 +1203,56 @@ async def compare_regulations(
     }
 
 
+class GenerateMappingsRequest(BaseModel):
+    source_regulation_id: int
+    target_regulation_id: int
+    threshold: float = 0.4
+
+
+@app.post("/api/regulations/generate-mappings")
+async def generate_regulation_mappings(
+    body: GenerateMappingsRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Automatically generate mapping suggestions between two regulations.
+
+    Uses SBERT semantic similarity to find matching statements, then
+    stores them as ai_suggested mappings.
+    """
+    from database import RegulationDocument
+    from mapping_engine import generate_mappings, format_as_suggestions
+
+    doc1 = (await session.execute(
+        select(RegulationDocument).where(RegulationDocument.id == body.source_regulation_id)
+    )).scalar_one_or_none()
+    doc2 = (await session.execute(
+        select(RegulationDocument).where(RegulationDocument.id == body.target_regulation_id)
+    )).scalar_one_or_none()
+
+    if not doc1 or not doc2:
+        raise HTTPException(404, "One or both regulations not found")
+
+    mappings = generate_mappings(
+        source_text=doc1.full_text,
+        target_text=doc2.full_text,
+        threshold=body.threshold,
+    )
+
+    suggestions = format_as_suggestions(
+        mappings,
+        source_reg_name=doc1.short_name,
+        target_reg_name=doc2.short_name,
+    )
+
+    return {
+        "source_regulation": doc1.short_name,
+        "target_regulation": doc2.short_name,
+        "threshold": body.threshold,
+        "mappings_found": len(suggestions),
+        "mappings": suggestions,
+    }
+
+
 # ---------------------------------------------------------------------------
 # AI module skeleton endpoints
 # ---------------------------------------------------------------------------

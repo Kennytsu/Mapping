@@ -1339,4 +1339,109 @@ function esc(str) {
         el.classList.remove('hidden');
         setTimeout(() => el.classList.add('hidden'), 8000);
     }
+
+    // --- Mapping Generation ---
+    const mapBtn = document.getElementById('map-generate-btn');
+    const mapThreshold = document.getElementById('map-threshold');
+    const mapThresholdVal = document.getElementById('map-threshold-val');
+
+    if (mapThreshold) {
+        mapThreshold.addEventListener('input', () => {
+            mapThresholdVal.textContent = parseFloat(mapThreshold.value).toFixed(2);
+        });
+    }
+
+    if (mapBtn) {
+        mapBtn.addEventListener('click', generateMappings);
+    }
+
+    function updateMapSelects() {
+        const srcSel = document.getElementById('map-source-reg');
+        const tgtSel = document.getElementById('map-target-reg');
+        if (!srcSel || !tgtSel) return;
+        const opts = '<option value="">-- Select --</option>' +
+            regulations.map(r => `<option value="${r.id}">${esc(r.short_name)} - ${esc(r.name)}</option>`).join('');
+        srcSel.innerHTML = opts;
+        tgtSel.innerHTML = opts;
+    }
+
+    const origLoadReg = loadRegulations;
+    loadRegulations = async function() {
+        await origLoadReg.call ? origLoadReg() : null;
+        try {
+            const resp = await fetch('/api/regulations');
+            regulations = await resp.json();
+            renderRegList();
+            updateRegSelect();
+            updateMapSelects();
+        } catch(e) {}
+    };
+    loadRegulations();
+
+    async function generateMappings() {
+        const srcId = document.getElementById('map-source-reg').value;
+        const tgtId = document.getElementById('map-target-reg').value;
+        const threshold = parseFloat(document.getElementById('map-threshold').value);
+
+        if (!srcId || !tgtId) {
+            showComplianceStatus('map-status', 'Select both source and target regulation.', 'error');
+            return;
+        }
+        if (srcId === tgtId) {
+            showComplianceStatus('map-status', 'Source and target must be different.', 'error');
+            return;
+        }
+
+        mapBtn.disabled = true;
+        mapBtn.textContent = 'Generating...';
+
+        try {
+            const resp = await fetch('/api/regulations/generate-mappings', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    source_regulation_id: parseInt(srcId),
+                    target_regulation_id: parseInt(tgtId),
+                    threshold: threshold,
+                }),
+            });
+            const data = await resp.json();
+
+            showComplianceStatus('map-status',
+                `Found ${data.mappings_found} mappings between ${data.source_regulation} and ${data.target_regulation}.`, 'success');
+            renderMappingResults(data.mappings);
+        } catch(e) {
+            showComplianceStatus('map-status', 'Generation failed: ' + e.message, 'error');
+        } finally {
+            mapBtn.disabled = false;
+            mapBtn.textContent = 'Generate Mappings';
+        }
+    }
+
+    function renderMappingResults(mappings) {
+        const card = document.getElementById('map-results-card');
+        const el = document.getElementById('map-results');
+        card.style.display = 'block';
+
+        if (!mappings || !mappings.length) {
+            el.innerHTML = '<p class="muted">No mappings found above threshold.</p>';
+            return;
+        }
+
+        el.innerHTML = mappings.map(m => `
+            <div class="check-result-item compliant">
+                <span class="result-badge">Similarity: ${(m.similarity * 100).toFixed(0)}%</span>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;">
+                    <div>
+                        <div style="font-size:0.65rem;font-weight:600;text-transform:uppercase;color:#6b7280;margin-bottom:2px;">Source</div>
+                        <div style="font-size:0.75rem;">${esc(m.source_statement)}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.65rem;font-weight:600;text-transform:uppercase;color:#6b7280;margin-bottom:2px;">Target</div>
+                        <div style="font-size:0.75rem;">${esc(m.target_statement)}</div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
 })();
