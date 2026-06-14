@@ -972,8 +972,14 @@ async def upload_regulation(
     body: RegulationUpload,
     session: AsyncSession = Depends(get_session),
 ):
-    """Upload a regulation document for analysis."""
-    from database import RegulationDocument
+    """Upload a regulation document for analysis.
+
+    Also creates a Framework and Controls from the extracted statements,
+    so they integrate with the existing mapping infrastructure.
+    """
+    from database import RegulationDocument, Framework, Control
+    from arc_pipeline import process_regulation, _split_into_statements
+
     doc = RegulationDocument(
         name=body.name,
         short_name=body.short_name,
@@ -983,6 +989,55 @@ async def upload_regulation(
         language=body.language,
     )
     session.add(doc)
+    await session.flush()
+
+    # Create or get Framework for this regulation
+    existing_fw = (await session.execute(
+        select(Framework).where(Framework.short_name == body.short_name)
+    )).scalar_one_or_none()
+
+    if not existing_fw:
+        fw = Framework(
+            name=body.name,
+            short_name=body.short_name,
+            version=body.version or "1.0",
+            description=f"Auto-imported regulation: {body.name}",
+            is_active=True,
+        )
+        session.add(fw)
+        await session.flush()
+        fw_id = fw.id
+    else:
+        fw_id = existing_fw.id
+
+    # Extract statements and create Controls
+    statements = _split_into_statements(body.full_text)
+    controls_created = 0
+    for idx, stmt in enumerate(statements, 1):
+        stmt = stmt.strip()
+        if len(stmt) < 15:
+            continue
+        control_id = f"{body.short_name}-S{idx:03d}"
+
+        existing_ctrl = (await session.execute(
+            select(Control).where(
+                Control.framework_id == fw_id,
+                Control.control_id == control_id,
+            )
+        )).scalar_one_or_none()
+
+        if not existing_ctrl:
+            # Use first 100 chars as title, full statement as description
+            title = stmt[:100] + ("..." if len(stmt) > 100 else "")
+            session.add(Control(
+                framework_id=fw_id,
+                control_id=control_id,
+                title=title,
+                description=stmt,
+                category="regulation",
+            ))
+            controls_created += 1
+
     await session.commit()
     await session.refresh(doc)
     return RegulationOut(
@@ -1217,9 +1272,9 @@ async def generate_regulation_mappings(
     """Automatically generate mapping suggestions between two regulations.
 
     Uses SBERT semantic similarity to find matching statements, then
-    stores them as ai_suggested mappings.
+    stores them as ai_suggested mappings in the existing mappings table.
     """
-    from database import RegulationDocument
+    from database import RegulationDocument, Framework, Control
     from mapping_engine import generate_mappings, format_as_suggestions
 
     doc1 = (await session.execute(
@@ -1244,11 +1299,72 @@ async def generate_regulation_mappings(
         target_reg_name=doc2.short_name,
     )
 
+    # Persist mappings into the existing mappings table
+    # Find frameworks for both regulations
+    src_fw = (await session.execute(
+        select(Framework).where(Framework.short_name == doc1.short_name)
+    )).scalar_one_or_none()
+    tgt_fw = (await session.execute(
+        select(Framework).where(Framework.short_name == doc2.short_name)
+    )).scalar_one_or_none()
+
+    persisted_count = 0
+    if src_fw and tgt_fw:
+        # Load all controls for both frameworks
+        src_controls = (await session.execute(
+            select(Control).where(Control.framework_id == src_fw.id)
+        )).scalars().all()
+        tgt_controls = (await session.execute(
+            select(Control).where(Control.framework_id == tgt_fw.id)
+        )).scalars().all()
+
+        # Index by description for matching
+        src_by_desc = {c.description: c for c in src_controls if c.description}
+        tgt_by_desc = {c.description: c for c in tgt_controls if c.description}
+
+        for suggestion in suggestions:
+            src_stmt = suggestion["source_statement"]
+            tgt_stmt = suggestion["target_statement"]
+
+            src_ctrl = src_by_desc.get(src_stmt)
+            tgt_ctrl = tgt_by_desc.get(tgt_stmt)
+
+            if src_ctrl and tgt_ctrl:
+                # Check if mapping already exists
+                existing = (await session.execute(
+                    select(Mapping).where(
+                        or_(
+                            and_(
+                                Mapping.source_control_id == src_ctrl.id,
+                                Mapping.target_control_id == tgt_ctrl.id,
+                            ),
+                            and_(
+                                Mapping.source_control_id == tgt_ctrl.id,
+                                Mapping.target_control_id == src_ctrl.id,
+                            ),
+                        )
+                    )
+                )).scalar_one_or_none()
+
+                if not existing:
+                    session.add(Mapping(
+                        source_control_id=src_ctrl.id,
+                        target_control_id=tgt_ctrl.id,
+                        confidence=suggestion["confidence"],
+                        source_type="ai_suggested",
+                        source_document=suggestion["source_document"],
+                        notes=suggestion["notes"],
+                    ))
+                    persisted_count += 1
+
+        await session.commit()
+
     return {
         "source_regulation": doc1.short_name,
         "target_regulation": doc2.short_name,
         "threshold": body.threshold,
         "mappings_found": len(suggestions),
+        "mappings_persisted": persisted_count,
         "mappings": suggestions,
     }
 
