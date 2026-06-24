@@ -25,11 +25,16 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       LLM_PROVIDER: ${LLM_PROVIDER:-rule_based}
+      WATSONX_API_KEY: ${WATSONX_API_KEY:-}
+      WATSONX_URL: ${WATSONX_URL:-https://us-south.ml.cloud.ibm.com}
+      WATSONX_PROJECT_ID: ${WATSONX_PROJECT_ID:-}
+      WATSONX_MODEL: ${WATSONX_MODEL:-ibm/granite-3-8b-instruct}
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./data:/app/data
+      - ./static:/app/static
 
 volumes:
   pgdata:

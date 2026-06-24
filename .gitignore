@@ -8,3 +8,4 @@ data/*.pdf
 data/*.xlsx
 data/*.xls
 pgdata/
+/papers

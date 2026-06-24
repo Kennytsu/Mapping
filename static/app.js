@@ -23,7 +23,7 @@ const tableState = {
 };
 
 const modalState = {
-    mode: 'edit', // 'edit' | 'add'
+    mode: 'edit',
     mappingId: null,
     sourceCtrl: null,
     targetCtrl: null,
@@ -36,29 +36,173 @@ document.addEventListener('DOMContentLoaded', () => {
     initVersions();
     initUpload();
     initMappingModal();
+    initConfirmModal();
     loadFrameworks();
+    loadLLMStatus();
+    document.getElementById('search-input').focus();
 });
+
+// ---------------------------------------------------------------------------
+// LLM Status
+// ---------------------------------------------------------------------------
+
+async function loadLLMStatus() {
+    const chip = document.getElementById('llm-status-chip');
+    const text = document.getElementById('llm-status-text');
+    const banner = document.getElementById('compliance-engine-banner');
+    const bannerText = document.getElementById('compliance-engine-text');
+    try {
+        const res = await fetch(`${API}/api/llm-status`);
+        const data = await res.json();
+
+        const providerLabels = {
+            watsonx: 'IBM watsonx.ai',
+            openai: 'OpenAI',
+            ollama: 'Ollama',
+            rule_based: 'Rule-based',
+        };
+
+        const label = providerLabels[data.provider] || data.provider;
+        const modelShort = data.model ? data.model.split('/').pop() : '';
+
+        if (data.status === 'active' && data.provider !== 'rule_based') {
+            chip.className = 'meta-chip llm-chip active';
+            text.textContent = `${label}: ${modelShort}`;
+            chip.title = `AI Engine: ${label} (${data.model})`;
+            if (banner) {
+                banner.className = 'ai-engine-banner';
+                bannerText.textContent = `Powered by ${label} \u2014 Model: ${data.model}`;
+            }
+        } else if (data.status === 'no_key' || data.status === 'no_project') {
+            chip.className = 'meta-chip llm-chip warning';
+            text.textContent = `${label} (config needed)`;
+            chip.title = `${label} configured but credentials incomplete`;
+            if (banner) {
+                banner.className = 'ai-engine-banner warning';
+                bannerText.textContent = `${label} configured \u2014 API key or project ID needed. Using rule-based fallback.`;
+            }
+        } else {
+            chip.className = 'meta-chip llm-chip inactive';
+            text.textContent = label;
+            chip.title = `AI Engine: ${label} (no LLM - using heuristics)`;
+            if (banner) {
+                banner.className = 'ai-engine-banner';
+                bannerText.textContent = `Using rule-based heuristics. Configure an LLM provider for AI-powered analysis.`;
+            }
+        }
+    } catch (err) {
+        chip.className = 'meta-chip llm-chip inactive';
+        text.textContent = 'Offline';
+        if (banner) {
+            banner.className = 'ai-engine-banner warning';
+            bannerText.textContent = 'Could not connect to backend.';
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Toast Notification System
+// ---------------------------------------------------------------------------
+
+function showToast(message, type = 'info', duration = 5000) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `${esc(message)}<button class="toast-close" aria-label="Dismiss">&times;</button>`;
+    container.appendChild(toast);
+
+    const closeBtn = toast.querySelector('.toast-close');
+    const remove = () => {
+        toast.classList.add('removing');
+        setTimeout(() => toast.remove(), 200);
+    };
+    closeBtn.addEventListener('click', remove);
+    if (duration > 0) setTimeout(remove, duration);
+}
+
+// ---------------------------------------------------------------------------
+// Progress Bar
+// ---------------------------------------------------------------------------
+
+function showProgress() {
+    document.getElementById('progress-bar').classList.remove('hidden');
+}
+
+function hideProgress() {
+    document.getElementById('progress-bar').classList.add('hidden');
+}
+
+// ---------------------------------------------------------------------------
+// Confirm Modal
+// ---------------------------------------------------------------------------
+
+let _confirmResolve = null;
+
+function initConfirmModal() {
+    const backdrop = document.getElementById('confirm-modal');
+    document.getElementById('confirm-modal-close').addEventListener('click', () => resolveConfirm(false));
+    document.getElementById('confirm-modal-cancel').addEventListener('click', () => resolveConfirm(false));
+    document.getElementById('confirm-modal-ok').addEventListener('click', () => resolveConfirm(true));
+    backdrop.addEventListener('click', e => {
+        if (e.target === backdrop) resolveConfirm(false);
+    });
+}
+
+function showConfirm(message, actionLabel = 'Delete') {
+    document.getElementById('confirm-modal-message').textContent = message;
+    document.getElementById('confirm-modal-ok').textContent = actionLabel;
+    document.getElementById('confirm-modal').classList.remove('hidden');
+    document.getElementById('confirm-modal-ok').focus();
+    return new Promise(resolve => { _confirmResolve = resolve; });
+}
+
+function resolveConfirm(result) {
+    document.getElementById('confirm-modal').classList.add('hidden');
+    if (_confirmResolve) {
+        _confirmResolve(result);
+        _confirmResolve = null;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
 
 function initTabs() {
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            document.querySelectorAll('.tab-panel').forEach(c => c.classList.remove('active'));
-            document.getElementById(tab.dataset.tab).classList.add('active');
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => activateTab(tab));
+        tab.addEventListener('keydown', e => {
+            const tabList = [...tabs];
+            const idx = tabList.indexOf(tab);
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const next = e.key === 'ArrowRight'
+                    ? tabList[(idx + 1) % tabList.length]
+                    : tabList[(idx - 1 + tabList.length) % tabList.length];
+                next.focus();
+                activateTab(next);
+            }
         });
     });
 }
 
-function switchToLookup(controlId) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelector('.tab[data-tab="lookup"]').classList.add('active');
+function activateTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+        t.setAttribute('tabindex', '-1');
+    });
+    tab.classList.add('active');
+    tab.setAttribute('aria-selected', 'true');
+    tab.setAttribute('tabindex', '0');
     document.querySelectorAll('.tab-panel').forEach(c => c.classList.remove('active'));
-    document.getElementById('lookup').classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+}
+
+function switchToLookup(controlId) {
+    const tab = document.querySelector('.tab[data-tab="lookup"]');
+    activateTab(tab);
     document.getElementById('search-input').value = controlId;
     clearTimeout(_searchDebounce);
     mappingHistory = [];
@@ -214,6 +358,7 @@ async function performSearch() {
     searchState.frameworkId = frameworkId;
 
     const resultsDiv = document.getElementById('search-results');
+    resultsDiv.setAttribute('aria-busy', 'true');
     resultsDiv.innerHTML = '<div class="loading">Searching</div>';
     document.getElementById('mapping-results').innerHTML =
         '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 12h36M6 24h24M6 36h30" stroke-linecap="round"/></svg><p>Select a control to view its mappings.</p></div>';
@@ -232,8 +377,9 @@ async function performSearch() {
         searchState.total = data.total || 0;
 
         if (searchState.total === 0) {
-            resultsDiv.innerHTML = '<div class="empty-state"><p>No controls found.</p></div>';
+            resultsDiv.innerHTML = '<div class="empty-state"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="24" cy="24" r="16"/><path d="M16 24h16M24 16v16" stroke-linecap="round" opacity=".3"/><path d="M18 18l12 12" stroke-linecap="round"/></svg><p>No controls found for &ldquo;' + esc(query) + '&rdquo;.<br>Try a different search term.</p></div>';
             document.getElementById('search-pagination').classList.add('hidden');
+            resultsDiv.setAttribute('aria-busy', 'false');
             return;
         }
 
@@ -244,24 +390,30 @@ async function performSearch() {
         items.forEach(ctrl => {
             const item = document.createElement('div');
             item.className = 'result-item';
+            item.setAttribute('tabindex', '0');
+            item.setAttribute('role', 'button');
             item.innerHTML = `
                 <span class="ctrl-id">${esc(ctrl.control_id)}</span>
                 <span class="fw-badge">${esc(ctrl.framework_short_name)}</span>
                 <span class="cat-badge">${esc(ctrl.category)}</span>
                 <span class="ctrl-title">${esc(ctrl.title)}</span>
             `;
-            item.addEventListener('click', () => {
+            const activate = () => {
                 document.querySelectorAll('.result-item').forEach(i => i.classList.remove('selected'));
                 item.classList.add('selected');
                 mappingHistory = [];
                 showMappings(ctrl);
-            });
+            };
+            item.addEventListener('click', activate);
+            item.addEventListener('keydown', e => { if (e.key === 'Enter') activate(); });
             resultsDiv.appendChild(item);
         });
 
         renderPagination();
+        resultsDiv.setAttribute('aria-busy', 'false');
     } catch (err) {
         resultsDiv.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
+        resultsDiv.setAttribute('aria-busy', 'false');
     }
 }
 
@@ -282,7 +434,8 @@ function renderPagination() {
 
 async function showMappings(ctrl, pushHistory = true) {
     const div = document.getElementById('mapping-results');
-    div.innerHTML = '<div class="loading">Loading mappings</div>';
+    div.setAttribute('aria-busy', 'true');
+    div.innerHTML = '<div class="loading">Loading control details</div>';
 
     if (pushHistory) {
         mappingHistory.push(ctrl);
@@ -297,27 +450,57 @@ async function showMappings(ctrl, pushHistory = true) {
 
         if (data.detail) {
             div.innerHTML = `<div class="empty-state"><p>${esc(data.detail)}</p></div>`;
+            div.setAttribute('aria-busy', 'false');
             return;
         }
 
-        // Use the canonical source from the API response so we have its DB id
-        // (needed when creating a new mapping from the modal).
         _currentSourceCtrl = data.source || ctrl;
 
         const fwName = ctrl.framework_short_name || data.source.framework_short_name;
-        const backBtn = mappingHistory.length > 1
-            ? `<button class="mapping-back-btn" id="mapping-back-btn">&#8592; Back</button>`
-            : '';
-        let html = `<div class="mappings-header">
-            ${backBtn}
-            <h2>${esc(ctrl.control_id)}</h2>
-            <span class="fw-badge">${esc(fwName)}</span>
-            <button class="btn-secondary btn-add-mapping" id="add-mapping-btn">+ Add Mapping</button>
+        const src = data.source || ctrl;
+        const mappingCount = data.mappings ? data.mappings.length : 0;
+
+        let breadcrumbHtml = '';
+        if (mappingHistory.length > 1) {
+            breadcrumbHtml = '<div class="breadcrumb-trail">';
+            mappingHistory.forEach((h, i) => {
+                const isLast = i === mappingHistory.length - 1;
+                breadcrumbHtml += `<span class="breadcrumb-item ${isLast ? 'current' : ''}" data-idx="${i}">${esc(h.control_id)}</span>`;
+                if (!isLast) breadcrumbHtml += '<span class="breadcrumb-sep">&#8250;</span>';
+            });
+            breadcrumbHtml += '</div>';
+        }
+
+        let html = breadcrumbHtml;
+
+        // Control Detail Card
+        html += `<div class="control-detail-card">
+            <div class="control-detail-header">
+                <span class="ctrl-id-lg">${esc(src.control_id)}</span>
+                <span class="fw-badge">${esc(fwName)}</span>
+            </div>
+            <h3 class="control-detail-title">${esc(src.title || '')}</h3>
+            <div class="control-detail-meta">
+                ${src.category ? `<div class="detail-meta-item"><span class="detail-meta-label">Category</span><span class="detail-meta-value">${esc(src.category)}</span></div>` : ''}
+                <div class="detail-meta-item"><span class="detail-meta-label">Framework</span><span class="detail-meta-value">${esc(fwName)} ${esc(src.version || '')}</span></div>
+                ${src.description ? `<div class="detail-meta-item detail-meta-desc"><span class="detail-meta-label">Description</span><span class="detail-meta-value">${esc(src.description)}</span></div>` : ''}
+            </div>
         </div>`;
-        html += `<div class="mappings-subtitle">${esc(data.source.title)}</div>`;
+
+        // Mappings Toggle Section (collapsed by default)
+        html += `<div class="mappings-toggle-section">
+            <button class="mappings-toggle-btn" id="mappings-toggle-btn">
+                <svg class="mappings-toggle-icon" viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                <span class="toggle-label">Show Mappings</span>
+                <span class="mappings-count-badge">${mappingCount}</span>
+            </button>
+            <button class="btn-secondary btn-add-mapping" id="add-mapping-btn">+ Add</button>
+        </div>`;
+
+        html += `<div class="mappings-section hidden" id="mappings-section">`;
 
         if (!data.mappings || data.mappings.length === 0) {
-            html += '<div class="empty-state"><p>No mappings found for this control. Click <strong>+ Add Mapping</strong> to create one.</p></div>';
+            html += '<div class="empty-state-sm"><p>No mappings found. Click <strong>+ Add</strong> to create one.</p></div>';
         } else {
             const grouped = {};
             data.mappings.forEach(m => {
@@ -341,15 +524,15 @@ async function showMappings(ctrl, pushHistory = true) {
                     html += `
                         <div class="mapping-item" data-mapping-id="${m.id}">
                             <div class="mapping-item-row">
-                                <span class="m-id mapping-drill" data-control-id="${esc(m.control_id)}" data-framework-id="${fwId}" data-framework-short-name="${esc(m.framework_short_name)}" title="Drill into this control">${esc(m.control_id)}</span>
+                                <span class="m-id mapping-drill" tabindex="0" role="link" data-control-id="${esc(m.control_id)}" data-framework-id="${fwId}" data-framework-short-name="${esc(m.framework_short_name)}" title="Drill into this control">${esc(m.control_id)}</span>
                                 <span class="badge ${cls}">${label}</span>
                                 ${renderConfidenceChip(m.confidence)}
                                 <span class="m-title">${esc(m.title)}</span>
                                 <span class="mapping-actions">
-                                    <button class="icon-btn edit-mapping" data-mapping-id="${m.id}" title="Edit">
+                                    <button class="icon-btn edit-mapping" data-mapping-id="${m.id}" title="Edit" aria-label="Edit mapping">
                                         <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM12.293 4.879L4 13.172V16h2.828l8.293-8.293-2.828-2.828z"/></svg>
                                     </button>
-                                    <button class="icon-btn icon-btn-danger delete-mapping" data-mapping-id="${m.id}" title="Delete">
+                                    <button class="icon-btn icon-btn-danger delete-mapping" data-mapping-id="${m.id}" title="Delete" aria-label="Delete mapping">
                                         <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"/></svg>
                                     </button>
                                 </span>
@@ -360,16 +543,28 @@ async function showMappings(ctrl, pushHistory = true) {
                 html += '</div>';
             }
         }
-        div.innerHTML = html;
+        html += '</div>';
 
-        const backEl = document.getElementById('mapping-back-btn');
-        if (backEl) {
-            backEl.addEventListener('click', () => {
-                mappingHistory.pop();
-                const prev = mappingHistory[mappingHistory.length - 1];
-                showMappings(prev, false);
+        div.innerHTML = html;
+        div.setAttribute('aria-busy', 'false');
+
+        // Toggle mappings visibility
+        const toggleBtn = document.getElementById('mappings-toggle-btn');
+        const mappingsSection = document.getElementById('mappings-section');
+        toggleBtn.addEventListener('click', () => {
+            const isHidden = mappingsSection.classList.contains('hidden');
+            mappingsSection.classList.toggle('hidden');
+            toggleBtn.querySelector('.mappings-toggle-icon').classList.toggle('rotated', isHidden);
+            toggleBtn.querySelector('.toggle-label').textContent = isHidden ? 'Hide Mappings' : 'Show Mappings';
+        });
+
+        div.querySelectorAll('.breadcrumb-item:not(.current)').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = parseInt(el.dataset.idx);
+                mappingHistory = mappingHistory.slice(0, idx + 1);
+                showMappings(mappingHistory[idx], false);
             });
-        }
+        });
 
         const addBtn = document.getElementById('add-mapping-btn');
         if (addBtn) {
@@ -377,13 +572,15 @@ async function showMappings(ctrl, pushHistory = true) {
         }
 
         div.querySelectorAll('.mapping-drill').forEach(el => {
-            el.addEventListener('click', () => {
+            const handler = () => {
                 showMappings({
                     control_id: el.dataset.controlId,
                     framework_id: parseInt(el.dataset.frameworkId) || 0,
                     framework_short_name: el.dataset.frameworkShortName,
                 });
-            });
+            };
+            el.addEventListener('click', handler);
+            el.addEventListener('keydown', e => { if (e.key === 'Enter') handler(); });
         });
 
         div.querySelectorAll('.edit-mapping').forEach(el => {
@@ -399,22 +596,25 @@ async function showMappings(ctrl, pushHistory = true) {
                 const id = parseInt(el.dataset.mappingId);
                 const m = data.mappings.find(x => x.id === id);
                 const label = m ? `${m.framework_short_name} ${m.control_id}` : `mapping #${id}`;
-                if (!confirm(`Delete mapping to ${label}? This cannot be undone.`)) return;
+                const confirmed = await showConfirm(`Delete mapping to ${label}? This cannot be undone.`, 'Delete');
+                if (!confirmed) return;
                 try {
                     const r = await fetch(`${API}/api/mappings/${id}`, { method: 'DELETE' });
                     if (!r.ok && r.status !== 204) {
                         const t = await r.text();
-                        alert(`Delete failed: ${t}`);
+                        showToast(`Delete failed: ${t}`, 'error');
                         return;
                     }
+                    showToast('Mapping deleted.', 'success', 3000);
                     showMappings(_currentSourceCtrl, false);
                 } catch (err) {
-                    alert(`Delete failed: ${err.message}`);
+                    showToast(`Delete failed: ${err.message}`, 'error');
                 }
             });
         });
     } catch (err) {
         div.innerHTML = `<div class="empty-state"><p>Error: ${esc(err.message)}</p></div>`;
+        div.setAttribute('aria-busy', 'false');
     }
 }
 
@@ -664,8 +864,11 @@ async function runCoverage() {
     const statusEl = document.getElementById('coverage-status');
     if (statusEl) statusEl.classList.add('hidden');
 
+    showProgress();
     ['stat-total', 'stat-mapped', 'stat-unmapped', 'stat-percent'].forEach(id => {
-        document.getElementById(id).textContent = '...';
+        const el = document.getElementById(id);
+        el.textContent = '\u00A0';
+        el.classList.add('skeleton');
     });
 
     try {
@@ -677,6 +880,10 @@ async function runCoverage() {
         const coverage = await coverageRes.json();
         const table = await tableRes.json();
         _lastCoverageTable = table;
+
+        ['stat-total', 'stat-mapped', 'stat-unmapped', 'stat-percent'].forEach(id => {
+            document.getElementById(id).classList.remove('skeleton');
+        });
 
         document.getElementById('stat-total').textContent = coverage.total_source_controls;
         document.getElementById('stat-mapped').textContent = coverage.mapped_controls;
@@ -696,7 +903,6 @@ async function runCoverage() {
             ? coverage.gap_controls.map(c => `<div class="detail-item coverage-link" data-id="${esc(c.id)}">${esc(c.id)}${c.title ? ` <span class="detail-title">— ${esc(c.title)}</span>` : ''}</div>`).join('')
             : '<div class="empty-state"><p>Full coverage.</p></div>';
 
-        // Reset table filters when running fresh analysis
         tableState.search = '';
         tableState.filter = 'all';
         document.getElementById('table-search-input').value = '';
@@ -710,6 +916,13 @@ async function runCoverage() {
         });
     } catch (err) {
         showCoverageStatus('Coverage analysis failed: ' + err.message, 'error');
+        ['stat-total', 'stat-mapped', 'stat-unmapped', 'stat-percent'].forEach(id => {
+            const el = document.getElementById(id);
+            el.classList.remove('skeleton');
+            el.textContent = '-';
+        });
+    } finally {
+        hideProgress();
     }
 }
 
@@ -956,7 +1169,7 @@ async function loadVersionChanges() {
         document.getElementById('version-changes-list').innerHTML =
             html || '<div class="empty-state"><p>No changes found.</p></div>';
     } catch (err) {
-        alert('Failed to load version changes: ' + err.message);
+        showToast('Failed to load version changes: ' + err.message, 'error');
     }
 }
 
@@ -1140,7 +1353,9 @@ function esc(str) {
             regulations = await resp.json();
             renderRegList();
             updateRegSelect();
-        } catch(e) {}
+        } catch(e) {
+            showToast('Could not load regulations.', 'error');
+        }
     }
 
     async function uploadRegulation() {
@@ -1264,7 +1479,9 @@ function esc(str) {
             });
             const graphData = await graphResp.json();
             renderGraph(graphData);
-        } catch(e) {}
+        } catch(e) {
+            showToast('Could not load regulation details.', 'error');
+        }
     }
 
     function renderTuples(tuples) {
@@ -1281,8 +1498,8 @@ function esc(str) {
             <div class="tuple-item">
                 <span class="tuple-type ${t.tuple_type}">${t.tuple_type}</span>
                 ${t.deontic_modal ? `<span class="tuple-type">${t.deontic_modal}</span>` : ''}
-                <div style="margin-top:4px;">${esc(t.source_statement || '')}</div>
-                ${t.verb ? `<div style="color:#6b7280;font-size:0.7rem;margin-top:2px;">verb: <b>${esc(t.verb)}</b></div>` : ''}
+                <div class="tuple-statement">${esc(t.source_statement || '')}</div>
+                ${t.verb ? `<div class="tuple-verb">verb: <b>${esc(t.verb)}</b></div>` : ''}
             </div>
         `).join('');
     }
@@ -1297,12 +1514,12 @@ function esc(str) {
             return;
         }
 
-        let html = '<div style="margin-bottom:8px;font-weight:600;">Nodes</div>';
+        let html = '<div class="graph-section-title">Nodes</div>';
         html += data.nodes.map(n =>
             `<span class="graph-node ${n.node_type}">${esc(n.text)}</span>`
         ).join('');
 
-        html += '<div style="margin-top:12px;margin-bottom:8px;font-weight:600;">Edges</div>';
+        html += '<div class="graph-section-title" style="margin-top:12px;">Edges</div>';
         const nodeMap = {};
         data.nodes.forEach(n => nodeMap[n.id] = n.text);
 
@@ -1374,7 +1591,9 @@ function esc(str) {
             renderRegList();
             updateRegSelect();
             updateMapSelects();
-        } catch(e) {}
+        } catch(e) {
+            showToast('Could not refresh regulations.', 'error');
+        }
     };
     loadRegulations();
 
@@ -1431,14 +1650,14 @@ function esc(str) {
         el.innerHTML = mappings.map(m => `
             <div class="check-result-item compliant">
                 <span class="result-badge">Similarity: ${(m.similarity * 100).toFixed(0)}%</span>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;">
+                <div class="map-result-grid">
                     <div>
-                        <div style="font-size:0.65rem;font-weight:600;text-transform:uppercase;color:#6b7280;margin-bottom:2px;">Source</div>
-                        <div style="font-size:0.75rem;">${esc(m.source_statement)}</div>
+                        <div class="map-result-label">Source</div>
+                        <div class="map-result-text">${esc(m.source_statement)}</div>
                     </div>
                     <div>
-                        <div style="font-size:0.65rem;font-weight:600;text-transform:uppercase;color:#6b7280;margin-bottom:2px;">Target</div>
-                        <div style="font-size:0.75rem;">${esc(m.target_statement)}</div>
+                        <div class="map-result-label">Target</div>
+                        <div class="map-result-text">${esc(m.target_statement)}</div>
                     </div>
                 </div>
             </div>

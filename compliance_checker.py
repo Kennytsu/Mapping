@@ -364,8 +364,11 @@ def _match_definitions(chunk: str, definitions: list[dict]) -> list[dict]:
 
 
 def _reason_with_llm(prompt: str, llm_client) -> dict:
-    """Use LLM for compliance reasoning."""
+    """Use LLM for compliance reasoning (OpenAI or watsonx)."""
     try:
+        if hasattr(llm_client, "_watsonx_model"):
+            return _reason_with_watsonx(prompt, llm_client)
+
         response = llm_client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
@@ -373,26 +376,50 @@ def _reason_with_llm(prompt: str, llm_client) -> dict:
         )
         content = response.choices[0].message.content
 
-        judgment = "undetermined"
-        explanation = content
-
-        judgment_match = re.search(
-            r"Judgment:\s*(compliant|non_compliant|undetermined)",
-            content, re.IGNORECASE,
-        )
-        if judgment_match:
-            judgment = judgment_match.group(1).lower()
-
-        explanation_match = re.search(
-            r"Explanation:\s*(.+)",
-            content, re.IGNORECASE | re.DOTALL,
-        )
-        if explanation_match:
-            explanation = explanation_match.group(1).strip()
-
-        return {"judgment": judgment, "explanation": explanation}
+        return _parse_compliance_response(content)
     except Exception as e:
         return {"judgment": "undetermined", "explanation": f"LLM error: {str(e)}"}
+
+
+def _reason_with_watsonx(prompt: str, watsonx_client) -> dict:
+    """Use IBM watsonx.ai for compliance reasoning."""
+    try:
+        from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
+        from ibm_watsonx_ai.foundation_models.utils.enums import DecodingMethods
+
+        params = {
+            GenParams.DECODING_METHOD: DecodingMethods.GREEDY,
+            GenParams.MAX_NEW_TOKENS: 500,
+            GenParams.TEMPERATURE: 0.1,
+            GenParams.STOP_SEQUENCES: ["\n\n\n"],
+        }
+
+        content = watsonx_client.generate_text(prompt=prompt, params=params)
+        return _parse_compliance_response(content)
+    except Exception as e:
+        return {"judgment": "undetermined", "explanation": f"watsonx error: {str(e)}"}
+
+
+def _parse_compliance_response(content: str) -> dict:
+    """Parse LLM response for judgment and explanation."""
+    judgment = "undetermined"
+    explanation = content
+
+    judgment_match = re.search(
+        r"Judgment:\s*(compliant|non_compliant|undetermined)",
+        content, re.IGNORECASE,
+    )
+    if judgment_match:
+        judgment = judgment_match.group(1).lower()
+
+    explanation_match = re.search(
+        r"Explanation:\s*(.+)",
+        content, re.IGNORECASE | re.DOTALL,
+    )
+    if explanation_match:
+        explanation = explanation_match.group(1).strip()
+
+    return {"judgment": judgment, "explanation": explanation}
 
 
 def _reason_rule_based(chunk: str, knowledge: dict, matches: list[dict]) -> dict:

@@ -17,6 +17,7 @@
     --gray-90: #262626;
     --gray-80: #393939;
     --gray-70: #525252;
+    --gray-60: #6f6f6f;
     --gray-50: #8d8d8d;
     --gray-30: #c6c6c6;
     --gray-20: #e0e0e0;
@@ -121,6 +122,41 @@ body {
     color: var(--white);
 }
 
+/* ─── LLM Status Chip ────────────────────────────────────────────── */
+
+.llm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.llm-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--gray-50);
+    flex-shrink: 0;
+}
+
+.llm-chip.active .llm-dot {
+    background: #42be65;
+    box-shadow: 0 0 6px rgba(66, 190, 101, 0.5);
+    animation: pulse-dot 2s ease infinite;
+}
+
+.llm-chip.warning .llm-dot {
+    background: #f1c21b;
+}
+
+.llm-chip.inactive .llm-dot {
+    background: var(--gray-50);
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 /* ─── Shell ──────────────────────────────────────────────────────── */
 
 .shell {
@@ -173,7 +209,7 @@ body {
 }
 
 .tab-panel { display: none; }
-.tab-panel.active { display: block; animation: fadeUp .25s ease; }
+.tab-panel.active { display: block; animation: fadeUp .3s ease forwards; }
 
 @keyframes fadeUp {
     from { opacity: 0; transform: translateY(6px); }
@@ -200,7 +236,7 @@ body {
 
 /* ─── Shared Form Elements ───────────────────────────────────────── */
 
-select, input[type="text"] {
+select, input[type="text"], textarea {
     font-family: inherit;
     font-size: 0.8125rem;
     padding: 9px 12px;
@@ -211,7 +247,7 @@ select, input[type="text"] {
     transition: border-color .15s, box-shadow .15s;
 }
 
-select:focus, input[type="text"]:focus {
+select:focus, input[type="text"]:focus, textarea:focus {
     outline: none;
     border-color: var(--blue-60);
     box-shadow: 0 0 0 1px var(--blue-60);
@@ -672,6 +708,7 @@ select:focus, input[type="text"]:focus {
     box-shadow: var(--shadow-sm);
     position: relative;
     overflow: hidden;
+    transition: transform .15s ease, box-shadow .15s ease;
 }
 
 .stat-card::before {
@@ -689,6 +726,11 @@ select:focus, input[type="text"]:focus {
 .stat-card.accent-blue::before  { background: var(--blue-60); }
 .stat-card.accent-red::before   { background: var(--red-60); }
 
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
 .stat-value {
     font-size: 1.75rem;
     font-weight: 700;
@@ -700,7 +742,7 @@ select:focus, input[type="text"]:focus {
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--gray-50);
+    color: var(--gray-60);
     margin-top: 2px;
 }
 
@@ -742,7 +784,7 @@ select:focus, input[type="text"]:focus {
 .count-badge {
     font-size: 0.6875rem;
     font-weight: 500;
-    color: var(--gray-50);
+    color: var(--gray-60);
 }
 
 .two-col {
@@ -952,7 +994,7 @@ select:focus, input[type="text"]:focus {
 .empty-state {
     text-align: center;
     padding: 40px 20px;
-    color: var(--gray-50);
+    color: var(--gray-60);
     font-size: 0.8125rem;
 }
 
@@ -968,7 +1010,7 @@ select:focus, input[type="text"]:focus {
 .loading {
     text-align: center;
     padding: 24px;
-    color: var(--gray-50);
+    color: var(--gray-60);
     font-size: 0.8125rem;
 }
 
@@ -1017,7 +1059,7 @@ select:focus, input[type="text"]:focus {
 
 .field-hint {
     font-size: 0.6875rem;
-    color: var(--gray-50);
+    color: var(--gray-60);
     margin-top: 2px;
     display: block;
 }
@@ -1091,7 +1133,13 @@ select:focus, input[type="text"]:focus {
     .shell { padding: 16px; }
     .top-bar-inner { padding: 0 16px; }
     .search-bar { flex-direction: column; }
-    .tabs { flex-wrap: wrap; }
+    .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { flex: 0 0 auto; white-space: nowrap; padding: 10px 14px; }
     .controls-row {
         flex-direction: column;
         align-items: stretch;
@@ -1545,6 +1593,16 @@ select:focus, input[type="text"]:focus {
     font-size: 0.78rem;
 }
 
+.tuple-statement {
+    margin-top: 4px;
+}
+
+.tuple-verb {
+    color: var(--gray-60);
+    font-size: 0.7rem;
+    margin-top: 2px;
+}
+
 .tuple-item .tuple-type {
     display: inline-block;
     padding: 1px 6px;
@@ -1568,6 +1626,11 @@ select:focus, input[type="text"]:focus {
     font-size: 0.75rem;
 }
 
+.graph-section-title {
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
 .graph-node {
     display: inline-block;
     padding: 4px 10px;
@@ -1588,4 +1651,427 @@ select:focus, input[type="text"]:focus {
     margin: 4px 0 4px 16px;
 }
 
-.muted { color: var(--gray-50); font-size: 0.8rem; }
+.muted { color: var(--gray-60); font-size: 0.8rem; }
+
+/* ─── AI Engine Banner ─────────────────────────────────────────── */
+
+.ai-engine-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 14px;
+    background: var(--blue-10);
+    border: 1px solid var(--blue-60);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--blue-70);
+}
+
+.ai-engine-banner svg {
+    flex-shrink: 0;
+    color: var(--blue-60);
+}
+
+.ai-engine-banner.warning {
+    background: var(--amber-10);
+    border-color: var(--amber-60);
+    color: #78350f;
+}
+
+.ai-engine-banner.warning svg {
+    color: var(--amber-60);
+}
+
+/* ─── Skip Link ─────────────────────────────────────────────────── */
+
+.skip-link {
+    position: absolute;
+    top: -100px;
+    left: 16px;
+    background: var(--blue-60);
+    color: var(--white);
+    padding: 8px 16px;
+    border-radius: var(--radius-xs);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    z-index: 9999;
+    text-decoration: none;
+    transition: top .2s;
+}
+
+.skip-link:focus {
+    top: 8px;
+}
+
+/* ─── Focus Visible ─────────────────────────────────────────────── */
+
+:focus-visible {
+    outline: 2px solid var(--blue-60);
+    outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* ─── Top Progress Bar ──────────────────────────────────────────── */
+
+.progress-bar-top {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 9999;
+    background: linear-gradient(90deg, var(--blue-60), var(--blue-50), var(--blue-60));
+    background-size: 200% 100%;
+    animation: progressSlide 1.5s ease infinite;
+}
+
+@keyframes progressSlide {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ─── Toast Notifications ───────────────────────────────────────── */
+
+#toast-container {
+    position: fixed;
+    top: 64px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    max-width: 400px;
+}
+
+.toast {
+    pointer-events: auto;
+    padding: 12px 16px;
+    padding-right: 36px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-md);
+    animation: toastIn .25s ease;
+    position: relative;
+    line-height: 1.4;
+}
+
+.toast.success {
+    background: var(--green-10);
+    color: var(--green-60);
+    border: 1px solid var(--green-60);
+}
+
+.toast.error {
+    background: var(--red-10);
+    color: var(--red-60);
+    border: 1px solid var(--red-60);
+}
+
+.toast.info {
+    background: var(--blue-10);
+    color: var(--blue-70);
+    border: 1px solid var(--blue-60);
+}
+
+.toast-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    color: inherit;
+    opacity: .6;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.toast-close:hover { opacity: 1; }
+
+.toast.removing {
+    animation: toastOut .2s ease forwards;
+}
+
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastOut {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(20px); }
+}
+
+/* ─── Skeleton Shimmer ──────────────────────────────────────────── */
+
+.skeleton {
+    background: linear-gradient(90deg, var(--gray-10) 25%, var(--gray-20) 50%, var(--gray-10) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease infinite;
+    border-radius: var(--radius-xs);
+    color: transparent !important;
+}
+
+.skeleton * { visibility: hidden; }
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton-text {
+    height: 14px;
+    margin-bottom: 8px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--gray-10) 25%, var(--gray-20) 50%, var(--gray-10) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease infinite;
+}
+
+.skeleton-text.short { width: 40%; }
+.skeleton-text.medium { width: 65%; }
+
+/* ─── Confirmation Modal ────────────────────────────────────────── */
+
+.modal-sm {
+    max-width: 400px;
+}
+
+.modal-sm .modal-body p {
+    font-size: 0.875rem;
+    color: var(--gray-80);
+    line-height: 1.5;
+}
+
+.btn-danger {
+    background: var(--red-60) !important;
+}
+
+.btn-danger:hover {
+    background: #b81922 !important;
+}
+
+/* ─── Card Description ──────────────────────────────────────────── */
+
+.card-description {
+    font-size: 0.78rem;
+    color: var(--gray-60);
+    margin-bottom: 12px;
+}
+
+/* ─── Responsive: Tabs Scroll ───────────────────────────────────── */
+
+@media (max-width: 1024px) and (min-width: 641px) {
+    .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+    .tab {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+}
+
+/* ─── Breadcrumb Trail ──────────────────────────────────────────── */
+
+.breadcrumb-trail {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--gray-60);
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.breadcrumb-trail .breadcrumb-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: background .15s, color .15s;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+}
+
+.breadcrumb-trail .breadcrumb-item:hover {
+    background: var(--blue-10);
+    color: var(--blue-70);
+}
+
+.breadcrumb-trail .breadcrumb-item.current {
+    font-weight: 600;
+    color: var(--gray-100);
+    cursor: default;
+}
+
+.breadcrumb-trail .breadcrumb-item.current:hover {
+    background: none;
+    color: var(--gray-100);
+}
+
+.breadcrumb-sep {
+    color: var(--gray-30);
+    font-size: 0.7rem;
+}
+
+/* ─── Mapping Similarity Result Styles ──────────────────────────── */
+
+.map-result-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.map-result-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--gray-60);
+    margin-bottom: 2px;
+}
+
+.map-result-text {
+    font-size: 0.75rem;
+}
+
+/* ─── Control Detail Card ───────────────────────────────────────── */
+
+.control-detail-card {
+    background: var(--white);
+    border: 1px solid var(--gray-20);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    border-top: 3px solid var(--blue-60);
+}
+
+.control-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.ctrl-id-lg {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--gray-100);
+}
+
+.control-detail-title {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--gray-80);
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.control-detail-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 12px;
+    border-top: 1px solid var(--gray-10);
+}
+
+.detail-meta-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.detail-meta-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-60);
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.detail-meta-value {
+    font-size: 0.8125rem;
+    color: var(--gray-80);
+}
+
+/* ─── Mappings Section ──────────────────────────────────────────── */
+
+.mappings-toggle-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 0 2px;
+}
+
+.mappings-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--blue-70);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: var(--radius-xs);
+    transition: background .15s, color .15s;
+}
+
+.mappings-toggle-btn:hover {
+    background: var(--blue-10);
+    color: var(--blue-80);
+}
+
+.mappings-toggle-icon {
+    transition: transform .2s ease;
+}
+
+.mappings-toggle-icon.rotated {
+    transform: rotate(180deg);
+}
+
+.mappings-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--blue-10);
+    color: var(--blue-70);
+    border-radius: 10px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+}
+
+.mappings-section {
+    margin-top: 4px;
+    animation: fadeUp .2s ease;
+}
+
+.mappings-toggle-section .btn-add-mapping {
+    padding: 5px 12px;
+    font-size: 0.75rem;
+}

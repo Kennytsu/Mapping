@@ -4,12 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Compliance Mapping Tool</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%230f62fe'/><path d='M30 25h-8a6 6 0 00-6 6v12m20-18h28a6 6 0 016 6v12M30 25v50m0 0h28a6 6 0 006-6V43M30 75h-8a6 6 0 01-6-6V43m0 0h56' fill='none' stroke='white' stroke-width='6'/></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <div id="progress-bar" class="progress-bar-top hidden"></div>
     <header class="top-bar">
         <div class="top-bar-inner">
             <div class="brand">
@@ -24,6 +28,10 @@
                 </div>
             </div>
             <div class="top-bar-meta">
+                <span class="meta-chip llm-chip" id="llm-status-chip" title="AI Engine">
+                    <span class="llm-dot"></span>
+                    <span id="llm-status-text">Loading...</span>
+                </span>
                 <span class="meta-chip" id="fw-count-chip">0 Frameworks</span>
                 <a href="/docs" target="_blank" class="meta-chip meta-link">API Docs</a>
             </div>
@@ -31,32 +39,32 @@
     </header>
 
     <div class="shell">
-        <nav class="tabs" role="tablist">
-            <button class="tab active" data-tab="lookup" role="tab">
+        <nav class="tabs" role="tablist" aria-label="Main navigation">
+            <button class="tab active" data-tab="lookup" role="tab" id="tab-lookup" aria-selected="true" aria-controls="lookup">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
                 Control Lookup
             </button>
-            <button class="tab" data-tab="coverage" role="tab">
+            <button class="tab" data-tab="coverage" role="tab" id="tab-coverage" aria-selected="false" aria-controls="coverage">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
                 Coverage
             </button>
-            <button class="tab" data-tab="versions" role="tab">
+            <button class="tab" data-tab="versions" role="tab" id="tab-versions" aria-selected="false" aria-controls="versions">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
                 Versions
             </button>
-            <button class="tab" data-tab="upload" role="tab">
+            <button class="tab" data-tab="upload" role="tab" id="tab-upload" aria-selected="false" aria-controls="upload">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"/></svg>
                 Upload
             </button>
-            <button class="tab" data-tab="compliance" role="tab">
+            <button class="tab" data-tab="compliance" role="tab" id="tab-compliance" aria-selected="false" aria-controls="compliance">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5C17.944 5.66 18 6.324 18 7c0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.676.056-1.34.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
                 Compliance
             </button>
         </nav>
 
-        <main class="content">
+        <main class="content" id="main-content">
             <!-- Control Lookup -->
-            <section id="lookup" class="tab-panel active">
+            <section id="lookup" class="tab-panel active" role="tabpanel" aria-labelledby="tab-lookup">
                 <div class="panel-header">
                     <h2>Control Lookup</h2>
                     <p>Search controls across all frameworks and explore their mappings.</p>
@@ -105,7 +113,7 @@
             </section>
 
             <!-- Coverage Analysis -->
-            <section id="coverage" class="tab-panel">
+            <section id="coverage" class="tab-panel" role="tabpanel" aria-labelledby="tab-coverage">
                 <div class="panel-header">
                     <h2>Coverage Analysis</h2>
                     <p>Compare two frameworks to see mapping coverage and identify gaps.</p>
@@ -127,7 +135,7 @@
                 </div>
 
                 <div id="coverage-results" class="hidden">
-                <div id="coverage-status" class="status hidden"></div>
+                <div id="coverage-status" class="status hidden" aria-live="polite"></div>
                     <div class="stats-grid">
                         <div class="stat-card"><div class="stat-value" id="stat-total">-</div><div class="stat-label">Source Controls</div></div>
                         <div class="stat-card accent-green"><div class="stat-value" id="stat-mapped">-</div><div class="stat-label">Mapped</div></div>
@@ -173,7 +181,7 @@
             </section>
 
             <!-- Version Tracking -->
-            <section id="versions" class="tab-panel">
+            <section id="versions" class="tab-panel" role="tabpanel" aria-labelledby="tab-versions">
                 <div class="panel-header">
                     <h2>Version Tracking</h2>
                     <p>Track changes between framework versions to ease migration.</p>
@@ -208,7 +216,7 @@
             </section>
 
             <!-- Upload -->
-            <section id="upload" class="tab-panel">
+            <section id="upload" class="tab-panel" role="tabpanel" aria-labelledby="tab-upload">
                 <div class="panel-header">
                     <h2>Upload Documents</h2>
                     <p>Upload compliance mapping documents to add new controls and mappings to the database.</p>
@@ -275,14 +283,18 @@
                         <button id="import-btn" class="btn-primary">Import to Database</button>
                     </div>
                 </div>
-                <div id="import-status" class="status hidden"></div>
+                <div id="import-status" class="status hidden" aria-live="polite"></div>
             </section>
 
             <!-- Compliance Checking -->
-            <section id="compliance" class="tab-panel">
+            <section id="compliance" class="tab-panel" role="tabpanel" aria-labelledby="tab-compliance">
                 <div class="panel-header">
                     <h2>Compliance Analysis</h2>
                     <p>Upload regulations, extract structured tuples, and check business processes for compliance.</p>
+                    <div class="ai-engine-banner" id="compliance-engine-banner">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 11H9v-2h2v2zm0-4H9V5h2v4z"/></svg>
+                        <span id="compliance-engine-text">Loading AI engine status...</span>
+                    </div>
                 </div>
 
                 <div class="compliance-grid">
@@ -309,7 +321,7 @@
                                 <textarea id="reg-text" rows="8" placeholder="Paste the regulatory text here..."></textarea>
                             </div>
                             <button id="reg-upload-btn" class="btn-primary">Upload &amp; Analyze</button>
-                            <div id="reg-upload-status" class="status hidden"></div>
+                            <div id="reg-upload-status" class="status hidden" aria-live="polite"></div>
                         </div>
 
                         <div class="card">
@@ -335,7 +347,7 @@
                                 <textarea id="check-business-text" rows="8" placeholder="Paste the business process text or privacy policy to check..."></textarea>
                             </div>
                             <button id="check-run-btn" class="btn-primary">Run Compliance Check</button>
-                            <div id="check-status" class="status hidden"></div>
+                            <div id="check-status" class="status hidden" aria-live="polite"></div>
                         </div>
 
                         <div class="card" id="check-results-card" style="display:none;">
@@ -355,7 +367,7 @@
 
                         <div class="card">
                             <h3>Auto-Generate Mappings</h3>
-                            <p style="font-size:0.78rem;color:var(--gray-60);margin-bottom:12px;">Find semantic overlaps between two regulations and generate mapping suggestions.</p>
+                            <p class="card-description">Find semantic overlaps between two regulations and generate mapping suggestions.</p>
                             <div class="field-row">
                                 <div class="field">
                                     <label for="map-source-reg">Source Regulation</label>
@@ -373,9 +385,10 @@
                             <div class="field">
                                 <label for="map-threshold">Similarity Threshold: <span id="map-threshold-val">0.40</span></label>
                                 <input type="range" id="map-threshold" min="0.2" max="0.9" step="0.05" value="0.4">
+                                <small class="field-hint">Lower = more matches but less precise. Higher = fewer but higher quality matches.</small>
                             </div>
                             <button id="map-generate-btn" class="btn-primary">Generate Mappings</button>
-                            <div id="map-status" class="status hidden"></div>
+                            <div id="map-status" class="status hidden" aria-live="polite"></div>
                         </div>
 
                         <div class="card" id="map-results-card" style="display:none;">
@@ -441,11 +454,28 @@
                     <textarea id="mm-notes" rows="3" placeholder="Reviewer notes (optional)"></textarea>
                 </div>
 
-                <div id="mapping-modal-error" class="status error hidden"></div>
+                <div id="mapping-modal-error" class="status error hidden" aria-live="assertive"></div>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" id="mapping-modal-cancel">Cancel</button>
                 <button class="btn-primary" id="mapping-modal-save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation modal -->
+    <div id="confirm-modal" class="modal-backdrop hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h3 id="confirm-modal-title">Confirm</h3>
+                <button class="modal-close" id="confirm-modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-modal-message">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="confirm-modal-cancel">Cancel</button>
+                <button class="btn-primary btn-danger" id="confirm-modal-ok">Delete</button>
             </div>
         </div>
     </div>

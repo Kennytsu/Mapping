@@ -141,6 +141,85 @@ app = FastAPI(
 
 
 # ---------------------------------------------------------------------------
+# LLM client factory
+# ---------------------------------------------------------------------------
+
+import os
+
+def _get_llm_client():
+    """Create an LLM client based on LLM_PROVIDER env var."""
+    provider = os.getenv("LLM_PROVIDER", "rule_based").lower()
+
+    if provider == "openai":
+        try:
+            import openai
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                return None
+            return openai.OpenAI(api_key=api_key)
+        except ImportError:
+            return None
+
+    elif provider == "watsonx":
+        try:
+            from ibm_watsonx_ai import Credentials
+            from ibm_watsonx_ai.foundation_models import ModelInference
+
+            api_key = os.getenv("WATSONX_API_KEY")
+            url = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
+            project_id = os.getenv("WATSONX_PROJECT_ID")
+            model_id = os.getenv("WATSONX_MODEL", "ibm/granite-3-8b-instruct")
+
+            if not api_key:
+                return None
+
+            credentials = Credentials(url=url, api_key=api_key)
+
+            model = ModelInference(
+                model_id=model_id,
+                credentials=credentials,
+                project_id=project_id or None,
+            )
+            model._watsonx_model = True
+            return model
+        except (ImportError, Exception):
+            return None
+
+    return None
+
+
+@app.get("/api/llm-status")
+async def llm_status():
+    """Return the current LLM provider configuration status."""
+    provider = os.getenv("LLM_PROVIDER", "rule_based").lower()
+    model = ""
+    status = "active"
+
+    if provider == "watsonx":
+        model = os.getenv("WATSONX_MODEL", "ibm/granite-3-8b-instruct")
+        has_key = bool(os.getenv("WATSONX_API_KEY"))
+        has_project = bool(os.getenv("WATSONX_PROJECT_ID"))
+        if not has_key:
+            status = "no_key"
+        elif not has_project:
+            status = "no_project"
+    elif provider == "openai":
+        model = os.getenv("OPENAI_MODEL", "gpt-4")
+        if not os.getenv("OPENAI_API_KEY"):
+            status = "no_key"
+    elif provider == "ollama":
+        model = os.getenv("OLLAMA_MODEL", "llama3")
+    elif provider == "rule_based":
+        model = "heuristic"
+
+    return {
+        "provider": provider,
+        "model": model,
+        "status": status,
+    }
+
+
+# ---------------------------------------------------------------------------
 # API routes
 # ---------------------------------------------------------------------------
 
@@ -1153,9 +1232,12 @@ async def run_compliance_check(
     if not doc:
         raise HTTPException(404, "Regulation not found")
 
+    llm_client = _get_llm_client()
+
     results = check_compliance(
         business_text=body.business_text,
         regulation_text=doc.full_text,
+        llm_client=llm_client,
     )
 
     return {"regulation_id": body.regulation_id, "results": results}
