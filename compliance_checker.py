@@ -364,10 +364,13 @@ def _match_definitions(chunk: str, definitions: list[dict]) -> list[dict]:
 
 
 def _reason_with_llm(prompt: str, llm_client) -> dict:
-    """Use LLM for compliance reasoning (OpenAI or watsonx)."""
+    """Use LLM for compliance reasoning (OpenAI, watsonx, or Bedrock)."""
     try:
         if hasattr(llm_client, "_watsonx_model"):
             return _reason_with_watsonx(prompt, llm_client)
+
+        if hasattr(llm_client, "_bedrock_model"):
+            return _reason_with_bedrock(prompt, llm_client)
 
         response = llm_client.chat.completions.create(
             model="gpt-4",
@@ -398,6 +401,31 @@ def _reason_with_watsonx(prompt: str, watsonx_client) -> dict:
         return _parse_compliance_response(content)
     except Exception as e:
         return {"judgment": "undetermined", "explanation": f"watsonx error: {str(e)}"}
+
+
+def _reason_with_bedrock(prompt: str, bedrock_client) -> dict:
+    """Use AWS Bedrock (Claude) for compliance reasoning."""
+    import json
+
+    try:
+        model_id = getattr(bedrock_client, "_bedrock_model_id", "anthropic.claude-sonnet-4-6")
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 500,
+            "temperature": 0.1,
+            "messages": [{"role": "user", "content": prompt}],
+        })
+        response = bedrock_client.invoke_model(
+            modelId=model_id,
+            body=body,
+            contentType="application/json",
+            accept="application/json",
+        )
+        result = json.loads(response["body"].read())
+        content = result["content"][0]["text"]
+        return _parse_compliance_response(content)
+    except Exception as e:
+        return {"judgment": "undetermined", "explanation": f"Bedrock error: {str(e)}"}
 
 
 def _parse_compliance_response(content: str) -> dict:

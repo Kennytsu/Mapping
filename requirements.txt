@@ -21,6 +21,7 @@ networkx>=3.0
 # LLM (compliance reasoning - optional)
 openai>=1.0.0
 ibm-watsonx-ai>=1.5.0
+boto3>=1.35.0
 
 # Testing
 pytest>=7.0.0

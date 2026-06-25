@@ -185,6 +185,30 @@ def _get_llm_client():
         except (ImportError, Exception):
             return None
 
+    elif provider == "bedrock":
+        try:
+            import boto3
+
+            access_key = os.getenv("AWS_ACCESS_KEY_ID")
+            secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+            region = os.getenv("AWS_REGION", "us-east-1")
+            model_id = os.getenv("BEDROCK_MODEL", "anthropic.claude-sonnet-4-6")
+
+            if not access_key or not secret_key:
+                return None
+
+            client = boto3.client(
+                "bedrock-runtime",
+                region_name=region,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+            )
+            client._bedrock_model = True
+            client._bedrock_model_id = model_id
+            return client
+        except (ImportError, Exception):
+            return None
+
     return None
 
 
@@ -203,6 +227,12 @@ async def llm_status():
             status = "no_key"
         elif not has_project:
             status = "no_project"
+    elif provider == "bedrock":
+        model = os.getenv("BEDROCK_MODEL", "anthropic.claude-sonnet-4-6")
+        has_access = bool(os.getenv("AWS_ACCESS_KEY_ID"))
+        has_secret = bool(os.getenv("AWS_SECRET_ACCESS_KEY"))
+        if not has_access or not has_secret:
+            status = "no_key"
     elif provider == "openai":
         model = os.getenv("OPENAI_MODEL", "gpt-4")
         if not os.getenv("OPENAI_API_KEY"):

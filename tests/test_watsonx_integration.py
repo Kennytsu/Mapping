@@ -129,8 +129,9 @@ class TestWatsonxReasoning:
         from compliance_checker import _reason_with_llm
 
         mock_client = MagicMock()
-        # No _watsonx_model attribute
+        # No _watsonx_model or _bedrock_model attribute
         del mock_client._watsonx_model
+        del mock_client._bedrock_model
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(
                 content="Judgment: compliant\nExplanation: All good."
@@ -141,7 +142,72 @@ class TestWatsonxReasoning:
         assert result["judgment"] == "compliant"
 
 
-class TestParseComplianceResponse:
+class TestBedrockReasoning:
+    """Tests for AWS Bedrock compliance reasoning."""
+
+    def test_reason_with_bedrock_compliant(self):
+        from unittest.mock import MagicMock, patch
+        import json
+        from compliance_checker import _reason_with_bedrock
+
+        mock_client = MagicMock()
+        mock_client._bedrock_model_id = "anthropic.claude-sonnet-4-6"
+        body_content = json.dumps({
+            "content": [{"text": "Judgment: compliant\nExplanation: Process aligns with regulation."}]
+        }).encode()
+        mock_client.invoke_model.return_value = {"body": MagicMock(read=lambda: body_content)}
+
+        result = _reason_with_bedrock("Test compliance prompt", mock_client)
+        assert result["judgment"] == "compliant"
+        assert "aligns" in result["explanation"]
+
+    def test_reason_with_bedrock_non_compliant(self):
+        from unittest.mock import MagicMock
+        import json
+        from compliance_checker import _reason_with_bedrock
+
+        mock_client = MagicMock()
+        mock_client._bedrock_model_id = "anthropic.claude-sonnet-4-6"
+        body_content = json.dumps({
+            "content": [{"text": "Judgment: non_compliant\nExplanation: Data shared without consent."}]
+        }).encode()
+        mock_client.invoke_model.return_value = {"body": MagicMock(read=lambda: body_content)}
+
+        result = _reason_with_bedrock("Test compliance prompt", mock_client)
+        assert result["judgment"] == "non_compliant"
+
+    def test_reason_with_bedrock_error_fallback(self):
+        from unittest.mock import MagicMock
+        from compliance_checker import _reason_with_bedrock
+
+        mock_client = MagicMock()
+        mock_client._bedrock_model_id = "anthropic.claude-sonnet-4-6"
+        mock_client.invoke_model.side_effect = Exception("Connection error")
+
+        result = _reason_with_bedrock("Test prompt", mock_client)
+        assert result["judgment"] == "undetermined"
+        assert "Bedrock error" in result["explanation"]
+
+    def test_llm_dispatches_to_bedrock(self):
+        from unittest.mock import MagicMock
+        import json
+        from compliance_checker import _reason_with_llm
+
+        mock_client = MagicMock()
+        del mock_client._watsonx_model
+        mock_client._bedrock_model = True
+        mock_client._bedrock_model_id = "anthropic.claude-sonnet-4-6"
+        body_content = json.dumps({
+            "content": [{"text": "Judgment: compliant\nExplanation: All requirements met."}]
+        }).encode()
+        mock_client.invoke_model.return_value = {"body": MagicMock(read=lambda: body_content)}
+
+        result = _reason_with_llm("Test prompt", mock_client)
+        assert result["judgment"] == "compliant"
+        mock_client.invoke_model.assert_called_once()
+
+
+
     """Test the response parsing helper."""
 
     def test_parse_standard_response(self):

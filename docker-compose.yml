@@ -29,6 +29,10 @@ services:
       WATSONX_URL: ${WATSONX_URL:-https://us-south.ml.cloud.ibm.com}
       WATSONX_PROJECT_ID: ${WATSONX_PROJECT_ID:-}
       WATSONX_MODEL: ${WATSONX_MODEL:-ibm/granite-3-8b-instruct}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      BEDROCK_MODEL: ${BEDROCK_MODEL:-anthropic.claude-sonnet-4-6}
     depends_on:
       db:
         condition: service_healthy
