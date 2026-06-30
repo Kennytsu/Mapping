@@ -137,7 +137,7 @@ Seed data:
 | No auth | POC, single user | Add OAuth/OIDC before any real deployment |
 | No LLM response caching | Simpler code | Cache by (regulation_hash + process_hash) |
 | Single `app.py` for all routes | Fast iteration | Split into route modules by domain |
-| `controls.embedding` not in initial migration | Column added after first cut | Add a proper Alembic migration |
+| `controls.embedding` not in initial migration | Column added after first cut | Done — migration 002 now handles it |
 
 ---
 

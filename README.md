@@ -7,7 +7,13 @@ Maps security controls between ISO 27001, BSI IT-Grundschutz, and C5. Uses NLP t
 You need Docker Desktop (or Podman) running. That's it.
 
 ```bash
+# 1. Start the stack (builds the image on first run)
 docker-compose up --build
+
+# 2. Apply database migrations
+docker exec mapping-app-1 alembic upgrade head
+
+# 3. Seed demo data
 docker exec mapping-app-1 python seed_data.py
 docker exec mapping-app-1 python seed_bsi_demo.py
 docker exec mapping-app-1 python seed_c5_demo.py
@@ -15,12 +21,11 @@ docker exec mapping-app-1 python seed_c5_demo.py
 
 Open http://localhost:8001.
 
-> **Note — fresh database only.** The `controls.embedding` column was added after the initial migration. If you see a `column controls.embedding does not exist` error, run this once:
+> **First time on a new machine** — copy `.env.example` to `.env` and fill in your API keys before running `docker-compose up`:
 > ```bash
-> docker exec mapping-db-1 psql -U compliance -d compliance_mapping \
->     -c "ALTER TABLE controls ADD COLUMN IF NOT EXISTS embedding vector(768);"
+> cp .env.example .env
+> # edit .env — at minimum set LLM_PROVIDER (defaults to rule_based which needs no key)
 > ```
-> This only happens on a brand-new volume; existing databases already have the column.
 
 ## What does this thing actually do?
 
@@ -112,7 +117,6 @@ python -m pytest tests/ -x -q
 - NLP runs synchronously — fine for one user, will block under load.
 - No caching of LLM responses (same check = same cost every time).
 - Document parser handles specific formats (BSI Zuordnungstabelle PDF, C5 criteria PDF, BSI IT-Grundschutz module PDF, structured Excel). It won't magically parse any random PDF.
-- `controls.embedding` is not in the initial Alembic migration — see the setup note above for the one-time fix on fresh installs.
 
 ## UI structure
 
