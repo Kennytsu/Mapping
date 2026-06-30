@@ -1,0 +1,42 @@
+INFORMATION SECURITY POLICY — StartupXYZ (draft v0.3)
+======================================================
+Author: Head of Engineering | Status: Draft
+
+We take security seriously. All employees must follow these rules:
+
+1. PASSWORDS
+   - Use a strong password (min 8 characters) for your laptop and all work accounts.
+   - Do not share passwords with colleagues.
+   - Enable two-factor authentication on your email and GitHub accounts.
+
+2. DEVICES
+   - Full disk encryption must be enabled on all laptops (FileVault on Mac,
+     BitLocker on Windows).
+   - Lock your screen when leaving your desk.
+   - Do not install software that hasn't been approved by engineering.
+
+3. DATA HANDLING
+   - Do not store customer data on personal devices or personal cloud storage
+     (Google Drive personal, Dropbox, etc.).
+   - Customer data must only be processed in our AWS production environment.
+   - Do not send customer data via email or Slack unless it is anonymised.
+
+4. INCIDENTS
+   - If you think you've been hacked, lost a device, or clicked a phishing link,
+     tell the Head of Engineering immediately (security@startupxyz.io).
+   - We'll figure it out together. Don't wait.
+
+5. REMOTE WORK
+   - Use the company VPN when connecting to production systems from public Wi-Fi.
+   - Do not access production databases from personal machines.
+
+6. CODE AND REPOSITORIES
+   - Do not commit secrets (API keys, passwords, tokens) to source control.
+   - Use environment variables or our secrets manager (AWS Secrets Manager) instead.
+   - All code changes go through pull request review before merging to main.
+
+7. OFFBOARDING
+   - When someone leaves the company, IT revokes their access on their last day.
+
+That's it for now. This policy will be updated as we grow.
+Last updated: March 2025

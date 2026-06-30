@@ -1,179 +1,156 @@
-# Compliance Framework Mapping Tool
+# Compliance Mapping Tool
 
-Map controls between **ISO 27001:2022**, **BSI IT-Grundschutz**, and **C5:2020** using official mapping documents. Built for IBM as a lookup-table tool that clusters multiple requirement sources to ease compliance implementation.
+Maps security controls between ISO 27001, BSI IT-Grundschutz, and C5. Uses NLP to extract obligations from regulation text, then an LLM to check if a business process actually meets them.
 
-## Architecture
+## Setup
 
-```mermaid
-flowchart TB
-    subgraph podman [Podman Compose]
-        subgraph app [App Container - Python 3.11]
-            FastAPI[FastAPI Backend]
-            Parsers[Document Parsers]
-            Static[Vanilla HTML/CSS/JS Frontend]
-        end
-        subgraph db [PostgreSQL 16]
-            PG[(PostgreSQL)]
-        end
-    end
-
-    Browser[Browser :8000] --> FastAPI
-    FastAPI --> Static
-    FastAPI --> PG
-    Parsers --> PG
-    BSI_PDF[BSI Zuordnungstabelle PDF] --> Parsers
-    C5_Excel[C5 Reference Tables Excel] --> Parsers
-```
-
-## Features
-
-| Feature | Description |
-|---------|-------------|
-| **Control Lookup** | Search any control ID or keyword with **paginated results** (25 / 50 / 100 per page). Bidirectional mappings across all frameworks. Click a mapped control ID to drill into its own mappings. |
-| **Mapping Editor** | **Add, edit, and delete** mappings directly in the UI. Per-mapping confidence slider, source-type (Official / Manual / AI), and reviewer notes. |
-| **Confidence Bands** | Every mapping now shows a colored chip — **Strong (≥80%)**, **Partial (50-80%)**, **Weak (<50%)** — visible in the lookup, coverage table, and CSV / Excel exports. |
-| **Coverage Analysis** | Compare two frameworks: coverage percentage, gap list, unmapped controls, full mapping table with **search, filter chips (All / Mapped / Gaps / Strong / Partial / Weak), and sortable columns**. |
-| **Version Tracking** | Track changes between framework versions (added, modified, renamed, removed controls). |
-| **Document Upload** | Upload new mapping documents (PDF, Excel, CSV) with explicit source/target framework and year selection. |
-| **Excel Export** | Download a styled Excel audit report with summary, full mapping table (now including confidence + strength + notes), unmapped controls, and target gaps. |
-| **BSI-Standard Refs** | Parses both IT-Grundschutz requirement IDs (e.g. `ISMS.1.A3`) and BSI-Standard document references (e.g. `BSI-Standard 200-2, Kapitel 9`). |
-| **API Docs** | Auto-generated Swagger UI at `/docs`. |
-
-## Data Sources
-
-| Document | Format | Content |
-|----------|--------|---------|
-| BSI Zuordnungstabelle (Edition 6, 2022) | PDF | ISO 27001:2022 clauses + Annex A mapped to BSI IT-Grundschutz modules and BSI-Standards |
-| C5:2020 Reference Tables | Excel | 121 C5 criteria mapped to ISO 27001:2022 clauses and Annex A controls |
-
-## Seeded Data
-
-- **3 Frameworks**: ISO 27001:2022 (105 controls), BSI IT-Grundschutz Edition 6 (407 controls), C5:2020 (121 controls)
-- **666 Official Mappings** from the two source documents
-- ISO 27001 clause titles (4.1-10.2) with real names
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | FastAPI, SQLAlchemy (async), Pydantic |
-| Database | PostgreSQL 16 + pgvector extension |
-| Frontend | Vanilla HTML/CSS/JS, IBM Plex Sans/Mono |
-| Containerization | Podman + podman-compose |
-| PDF Parsing | pdfplumber |
-| Excel Parsing | pandas + openpyxl |
-| Migrations | Alembic (configured) |
-
-## Database Schema
-
-```sql
-frameworks   (id, name, short_name, version, description, is_active)
-controls     (id, framework_id, control_id, title, description, category, embedding[vector(1536)], UNIQUE(framework_id, control_id))
-mappings     (id, source_control_id, target_control_id, confidence, source_type, source_document, notes)
-version_changes (id, framework_id, old_version, new_version, change_type, old_control_id, new_control_id, description)
-```
-
-## Project Structure
-
-```
-├── app.py                  # FastAPI application (routes, schemas)
-├── database.py             # SQLAlchemy models, async/sync engines
-├── document_parser.py      # BSI PDF + C5 Excel + CSV parsers
-├── seed_data.py            # CLI to seed frameworks, controls, mappings
-├── test_mappings.py        # Automated mapping validation (25 checks)
-├── podman-compose.yml      # PostgreSQL 16 + app containers
-├── Dockerfile              # Python 3.11-slim, uvicorn
-├── requirements.txt        # Python dependencies
-├── static/
-│   ├── index.html          # Single-page app shell
-│   ├── style.css           # IBM Carbon-inspired design
-│   └── app.js              # Client-side logic
-└── data/                   # Mount point for source documents (not committed)
-    ├── Zuordnung_ISO_und_IT_Grundschutz_Edit_6.pdf
-    └── C5_2020_Reference_Tables_ISO27001.xlsx
-```
-
-## Quick Start
-
-### Prerequisites
-
-- [Podman](https://podman.io/) with podman-compose
-- BSI PDF and C5 Excel in the `data/` folder
-
-### Start
+You need Docker Desktop running. That's it.
 
 ```bash
-podman machine start
-podman-compose -f podman-compose.yml up -d
+docker-compose up --build
+docker exec mapping-app-1 python seed_data.py
+docker exec mapping-app-1 python seed_bsi_demo.py
+docker exec mapping-app-1 python seed_c5_demo.py
 ```
 
-### Seed the database
+Open http://localhost:8001.
+
+## What does this thing actually do?
+
+Three main jobs:
+
+1. **Control mapping** — You have ISO 27001 controls and BSI controls. The tool finds which ones overlap using semantic similarity (SBERT). You can also upload official mapping tables (Excel/PDF) to import known mappings directly.
+
+2. **Compliance checking** — Paste regulation text + a business process description. The system extracts what the regulation *requires* (obligations, prohibitions, rights), then asks an LLM whether the business process satisfies those requirements.
+
+3. **Tracking** — Each mapping gets a status (implemented / partial / not implemented), an owner, evidence notes. So you can use it as a living compliance register.
+
+## How the backend works
+
+The compliance check pipeline has a few stages. Here's the short version:
+
+```
+Regulation text
+  → split into sentences (spaCy)
+  → classify each sentence: is it a definition? an obligation? a right?
+  → store as structured "ARC tuples"
+  → build a graph of who-must-do-what
+
+Business process text
+  → split into chunks
+  → for each chunk, find the most relevant obligations from the graph (cosine similarity)
+  → bundle the chunk + matched obligations + definitions into a prompt
+  → send to LLM → get back "compliant / non-compliant / undetermined" + explanation
+```
+
+The files that do this:
+
+- `arc_pipeline.py` — sentence splitting + classification + tuple extraction
+- `dynamic_layer.py` — builds the obligation graph from tuples
+- `static_layer.py` — pulls out term definitions (so the LLM knows what "personal data" means legally)
+- `compliance_checker.py` — orchestrates the matching and LLM call
+- `mapping_engine.py` — compares two regulations to find overlapping controls
+
+## LLM providers
+
+Set `LLM_PROVIDER` in `.env`. Options:
+
+| Provider | What you need |
+|----------|---------------|
+| `bedrock` | AWS credentials + model ID (Claude Sonnet 4.6) |
+| `openai` | API key |
+| `watsonx` | IBM Cloud API key + project ID |
+| `ollama` | Local Ollama running |
+| `rule_based` | Nothing — uses heuristics, less accurate but free |
+
+## File layout
+
+```
+app.py                  ← all API routes live here
+database.py             ← SQLAlchemy models
+document_parser.py      ← pluggable parser registry (add new formats here)
+llm_providers.py        ← pluggable LLM registry (add new providers here)
+arc_pipeline.py         ← extracts structured data from regulation text
+static_layer.py         ← term/definition extraction
+dynamic_layer.py        ← obligation graph construction
+compliance_checker.py   ← the actual compliance reasoning
+mapping_engine.py       ← auto-generates control mappings via SBERT
+seed_data.py            ← populates ISO 27001 framework + controls
+seed_bsi_demo.py        ← populates BSI controls + official mappings
+seed_c5_demo.py         ← populates C5 controls + ISO descriptions + C5↔ISO mappings
+docker-compose.yml      ← runs app + PostgreSQL
+static/                 ← frontend (single HTML page + JS + CSS)
+tests/                  ← pytest suite (~154 tests)
+```
+
+## Database
+
+PostgreSQL with pgvector. Main tables:
+
+- `frameworks` — ISO 27001, BSI IT-Grundschutz, C5
+- `controls` — individual controls with embeddings
+- `mappings` — links between controls (with confidence score + status)
+- `regulation_documents` — full regulation text for compliance checking
+- `arc_tuples` — extracted obligations/definitions/rights
+
+## Running tests
 
 ```bash
-podman exec compliance-app python seed_data.py \
-  --bsi /app/data/Zuordnung_ISO_und_IT_Grundschutz_Edit_6.pdf \
-  --c5  /app/data/C5_2020_Reference_Tables_ISO27001.xlsx
+python -m pytest tests/ -x -q
 ```
 
-### Access
+## What's NOT done (POC scope)
 
-- **UI**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+- No auth. Anyone with the URL can access everything.
+- NLP runs synchronously — fine for one user, will block under load.
+- No caching of LLM responses (same check = same cost every time).
+- Document parser handles specific formats (BSI Zuordnungstabelle PDF, C5 criteria PDF, BSI IT-Grundschutz module PDF, structured Excel). It won't magically parse any random PDF.
 
-## API Endpoints
+## UI structure
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/frameworks` | List all frameworks with control counts |
-| GET | `/api/controls?q=&framework_id=&limit=&offset=` | **Paginated** control search — returns `{ total, limit, offset, items }` |
-| GET | `/api/mappings/{control_id}?framework_id=` | Bidirectional mappings for a control (now includes mapping `id`, `confidence`, `notes`) |
-| POST | `/api/mappings` | **Create** a manual mapping between two existing controls |
-| PATCH | `/api/mappings/{id}` | **Update** a mapping's confidence, source_type, or notes |
-| DELETE | `/api/mappings/{id}` | **Delete** a mapping |
-| GET | `/api/coverage?source=&target=` | Coverage stats between two frameworks |
-| GET | `/api/coverage/table?source=&target=` | Full mapping table (rows include `mapping_id`, `confidence`, `notes`) |
-| GET | `/api/coverage/export?source=&target=` | Download Excel audit report with confidence + strength + notes columns |
-| GET | `/api/versions/{fw}/transitions` | Available version transitions |
-| GET | `/api/versions/{fw}/changes?from=&to=` | Version change details |
-| POST | `/api/upload` | Parse a document (returns preview) |
-| POST | `/api/import` | Import parsed controls and mappings |
-| POST | `/api/embeddings/generate` | Placeholder — trigger embedding generation (AI module) |
-| GET | `/api/mappings/suggest?control_id=&framework_id=&top_k=` | AI-suggested mappings via cosine similarity |
+The frontend has five tabs:
 
-## Phase 4: AI Suggestions (In Progress)
+| Tab | What it does |
+|-----|-------------|
+| **Lookup** | Search any control by ID/title, view its description and existing mappings |
+| **Coverage** | Pick two frameworks → shows mapping coverage %, gaps, and next-step actions |
+| **Mappings** | Full mapping table with sort/filter/export — populated after a coverage analysis |
+| **Import** | Upload official docs (BSI PDFs, Excel, CSV) to add controls and mappings to the DB |
+| **AI Mapping** | Generate new mappings: either between existing frameworks (SBERT) or from raw regulation text (ARC pipeline) |
 
-The infrastructure is in place for a colleague's AI module based on [Towards Automated Regulation Analysis for Effective Privacy Compliance](https://www.ndss-symposium.org/wp-content/uploads/2024-650-paper.pdf).
+## Adding stuff
 
-### What's ready
+**New LLM provider** — open `llm_providers.py` and add three things:
 
-| Component | Status |
-|-----------|--------|
-| `pgvector/pgvector:pg16` Docker image | Installed |
-| `CREATE EXTENSION vector` | Auto-enabled on startup |
-| `controls.embedding` column (`vector(1536)`) | Added, nullable |
-| `POST /api/embeddings/generate` | Placeholder — returns `not_implemented` |
-| `GET /api/mappings/suggest` | Skeleton — performs cosine similarity when embeddings exist |
+```python
+def _my_provider_factory():
+    # return a client object, or None if not configured
+    ...
 
-### Data flow
+def _my_provider_reason(prompt: str, client) -> dict:
+    # call the API, return {"judgment": "...", "explanation": "..."}
+    ...
 
-```mermaid
-flowchart LR
-    subgraph current [Current - Official Mappings]
-        PDF[BSI PDF] --> Parser
-        Excel[C5 Excel] --> Parser
-        Parser --> DB[(PostgreSQL + pgvector)]
-    end
-    subgraph ai [AI Module - Next Steps]
-        Controls[Control text] --> Embedder["OpenAI text-embedding-3-small"]
-        Embedder --> Vectors["controls.embedding column"]
-        Vectors --> Similarity["Cosine similarity search"]
-        Similarity --> Suggestions["GET /api/mappings/suggest"]
-    end
-    DB --> Controls
+register_provider("my_provider", _my_provider_factory, _my_provider_reason, "_is_my_provider")
 ```
 
-### Next steps for the AI module
+Then set `LLM_PROVIDER=my_provider` in `.env`. Done. No other files need changing.
 
-1. Implement `POST /api/embeddings/generate` — iterate over controls in a framework, call the embedding model, and store vectors in the `embedding` column.
-2. The `GET /api/mappings/suggest` endpoint will automatically start returning results once embeddings exist.
-3. AI-suggested mappings use `source_type='ai_suggested'` with a confidence score derived from cosine similarity.
+**New document parser** — open `document_parser.py` and add:
+
+```python
+def _parse_my_format(content: bytes, doc_type: str) -> ParseOutput:
+    # parse the bytes, return ParseOutput(success=True, controls=[...], mappings=[...])
+    ...
+
+register_parser(
+    name="My Format",
+    extensions=[".xlsx"],
+    parse_fn=_parse_my_format,
+    description="Description shown in the upload dropdown",
+)
+```
+
+The upload API and `/api/parsers` endpoint pick it up automatically.
+
+**New framework** — either write a seed script (copy `seed_bsi_demo.py`), or use the upload tab with a properly formatted Excel/CSV.

@@ -33,13 +33,56 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initSearch();
     initCoverage();
-    initVersions();
     initUpload();
     initMappingModal();
     initConfirmModal();
+    initFrameworkMapping();
     loadFrameworks();
     loadLLMStatus();
     document.getElementById('search-input').focus();
+
+    // wf-link buttons switch tabs (delegated — handles dynamically added buttons too)
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('.wf-link[data-tab]');
+        if (btn) switchTab(btn.dataset.tab);
+    });
+
+    // AI Mapping path chooser
+    const pathFwBtn = document.getElementById('path-fw-btn');
+    const pathTextBtn = document.getElementById('path-text-btn');
+    const pathFwContent = document.getElementById('path-fw-content');
+    const pathTextContent = document.getElementById('path-text-content');
+    if (pathFwBtn && pathTextBtn) {
+        pathFwBtn.addEventListener('click', () => {
+            pathFwBtn.classList.add('active');
+            pathTextBtn.classList.remove('active');
+            pathFwContent.style.display = '';
+            pathTextContent.style.display = 'none';
+        });
+        pathTextBtn.addEventListener('click', () => {
+            pathTextBtn.classList.add('active');
+            pathFwBtn.classList.remove('active');
+            pathTextContent.style.display = '';
+            pathFwContent.style.display = 'none';
+        });
+    }
+
+    // Inline framework create toggle in Import tab
+    const toggleFwCreateBtn = document.getElementById('toggle-fw-create-btn');
+    const inlineFwCreate = document.getElementById('inline-fw-create');
+    if (toggleFwCreateBtn && inlineFwCreate) {
+        toggleFwCreateBtn.addEventListener('click', () => {
+            const showing = inlineFwCreate.style.display !== 'none';
+            inlineFwCreate.style.display = showing ? 'none' : '';
+            toggleFwCreateBtn.textContent = showing ? '+ Framework not in the list?' : '− Hide';
+        });
+    }
+
+    // Post-import next steps buttons
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('#import-next-steps .wf-link[data-tab]');
+        if (btn) switchTab(btn.dataset.tab);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -59,6 +102,7 @@ async function loadLLMStatus() {
             watsonx: 'IBM watsonx.ai',
             openai: 'OpenAI',
             ollama: 'Ollama',
+            bedrock: 'AWS Bedrock',
             rule_based: 'Rule-based',
         };
 
@@ -198,6 +242,15 @@ function activateTab(tab) {
     tab.setAttribute('tabindex', '0');
     document.querySelectorAll('.tab-panel').forEach(c => c.classList.remove('active'));
     document.getElementById(tab.dataset.tab).classList.add('active');
+
+    // Tab-specific actions on activation
+    const tabId = tab.dataset.tab;
+    if (tabId === 'mappings' && _lastCoverageTable) renderMappingTable(_lastCoverageTable);
+}
+
+function switchTab(tabId) {
+    const tab = document.querySelector(`.tab[data-tab="${tabId}"]`);
+    if (tab) activateTab(tab);
 }
 
 function switchToLookup(controlId) {
@@ -211,7 +264,7 @@ function switchToLookup(controlId) {
 }
 
 // ---------------------------------------------------------------------------
-// Framework loading
+// Framework Loading
 // ---------------------------------------------------------------------------
 
 async function loadFrameworks() {
@@ -234,11 +287,15 @@ function populateFrameworkSelects() {
         'framework-filter': true,
         'source-fw': false,
         'target-fw': false,
-        'version-fw': false,
         'upload-source-fw': false,
         'upload-target-fw': false,
         'mm-target-fw': false,
+        'fw-map-source': false,
+        'fw-map-target': false,
     };
+
+    // selects that need a blank "choose" first option
+    const withBlank = new Set(['source-fw', 'target-fw', 'upload-source-fw', 'upload-target-fw', 'mm-target-fw', 'fw-map-source', 'fw-map-target']);
 
     for (const [id, addAll] of Object.entries(selects)) {
         const el = document.getElementById(id);
@@ -246,6 +303,7 @@ function populateFrameworkSelects() {
         const current = el.value;
         el.innerHTML = '';
         if (addAll) el.innerHTML = '<option value="">All Frameworks</option>';
+        else if (withBlank.has(id)) el.innerHTML = '<option value="">-- Select --</option>';
         frameworksCache.forEach(fw => {
             const opt = document.createElement('option');
             opt.value = fw.id;
@@ -257,7 +315,7 @@ function populateFrameworkSelects() {
 }
 
 // ---------------------------------------------------------------------------
-// Confidence helpers
+// Confidence Helpers
 // ---------------------------------------------------------------------------
 
 function confidenceBand(c) {
@@ -278,6 +336,23 @@ function renderConfidenceChip(confidence) {
     const label = confidenceLabel(band);
     if (band === 'none') return `<span class="confidence-chip none">—</span>`;
     return `<span class="confidence-chip ${band}" title="Confidence ${pct}%">${label} ${pct}%</span>`;
+}
+
+function renderStatusBadge(status) {
+    const labels = {
+        'implemented': 'Implemented',
+        'partial': 'Partial',
+        'not_implemented': 'Not Implemented',
+        'not_assessed': 'Not Assessed',
+    };
+    const classes = {
+        'implemented': 'status-implemented',
+        'partial': 'status-partial',
+        'not_implemented': 'status-not-implemented',
+        'not_assessed': 'status-not-assessed',
+    };
+    const s = status || 'not_assessed';
+    return `<span class="impl-status-badge ${classes[s] || 'status-not-assessed'}">${labels[s] || 'Not Assessed'}</span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,10 +468,15 @@ async function performSearch() {
             item.setAttribute('tabindex', '0');
             item.setAttribute('role', 'button');
             item.innerHTML = `
-                <span class="ctrl-id">${esc(ctrl.control_id)}</span>
-                <span class="fw-badge">${esc(ctrl.framework_short_name)}</span>
-                <span class="cat-badge">${esc(ctrl.category)}</span>
-                <span class="ctrl-title">${esc(ctrl.title)}</span>
+                <div class="result-item-main">
+                    <div class="result-item-top">
+                        <span class="ctrl-id">${esc(ctrl.control_id)}</span>
+                        <span class="fw-badge">${esc(ctrl.framework_short_name)}</span>
+                        ${ctrl.category ? `<span class="cat-badge">${esc(ctrl.category)}</span>` : ''}
+                    </div>
+                    <span class="ctrl-title">${esc(ctrl.title)}</span>
+                    ${ctrl.description ? `<p class="ctrl-desc-snippet">${esc(ctrl.description)}</p>` : ''}
+                </div>
             `;
             const activate = () => {
                 document.querySelectorAll('.result-item').forEach(i => i.classList.remove('selected'));
@@ -483,7 +563,7 @@ async function showMappings(ctrl, pushHistory = true) {
             <div class="control-detail-meta">
                 ${src.category ? `<div class="detail-meta-item"><span class="detail-meta-label">Category</span><span class="detail-meta-value">${esc(src.category)}</span></div>` : ''}
                 <div class="detail-meta-item"><span class="detail-meta-label">Framework</span><span class="detail-meta-value">${esc(fwName)} ${esc(src.version || '')}</span></div>
-                ${src.description ? `<div class="detail-meta-item detail-meta-desc"><span class="detail-meta-label">Description</span><span class="detail-meta-value">${esc(src.description)}</span></div>` : ''}
+                <div class="detail-meta-item detail-meta-desc"><span class="detail-meta-label">Description</span><span class="detail-meta-value">${src.description ? esc(src.description) : '<em class="muted">No description available</em>'}</span></div>
             </div>
         </div>`;
 
@@ -527,6 +607,7 @@ async function showMappings(ctrl, pushHistory = true) {
                                 <span class="m-id mapping-drill" tabindex="0" role="link" data-control-id="${esc(m.control_id)}" data-framework-id="${fwId}" data-framework-short-name="${esc(m.framework_short_name)}" title="Drill into this control">${esc(m.control_id)}</span>
                                 <span class="badge ${cls}">${label}</span>
                                 ${renderConfidenceChip(m.confidence)}
+                                ${renderStatusBadge(m.implementation_status)}
                                 <span class="m-title">${esc(m.title)}</span>
                                 <span class="mapping-actions">
                                     <button class="icon-btn edit-mapping" data-mapping-id="${m.id}" title="Edit" aria-label="Edit mapping">
@@ -683,6 +764,10 @@ function openMappingModal(mode, ctxOrMapping) {
         document.getElementById('mm-source-type').value = 'manual';
         document.getElementById('mm-confidence').value = '1';
         document.getElementById('mm-notes').value = '';
+        document.getElementById('mm-impl-status').value = 'not_assessed';
+        document.getElementById('mm-owner').value = '';
+        document.getElementById('mm-review-date').value = '';
+        document.getElementById('mm-evidence').value = '';
     } else {
         const m = ctxOrMapping;
         modalState.mappingId = m.id;
@@ -698,6 +783,10 @@ function openMappingModal(mode, ctxOrMapping) {
         document.getElementById('mm-source-type').value = m.source_type || 'manual';
         document.getElementById('mm-confidence').value = String(m.confidence ?? 1);
         document.getElementById('mm-notes').value = m.notes || '';
+        document.getElementById('mm-impl-status').value = m.implementation_status || 'not_assessed';
+        document.getElementById('mm-owner').value = m.owner || '';
+        document.getElementById('mm-review-date').value = m.review_date || '';
+        document.getElementById('mm-evidence').value = m.evidence_notes || '';
     }
 
     // Trigger slider event to refresh the chip + value display
@@ -758,6 +847,10 @@ async function saveMappingFromModal() {
     const confidence = parseFloat(document.getElementById('mm-confidence').value);
     const sourceType = document.getElementById('mm-source-type').value;
     const notes = document.getElementById('mm-notes').value;
+    const implStatus = document.getElementById('mm-impl-status').value;
+    const owner = document.getElementById('mm-owner').value;
+    const reviewDate = document.getElementById('mm-review-date').value;
+    const evidence = document.getElementById('mm-evidence').value;
 
     const saveBtn = document.getElementById('mapping-modal-save');
     saveBtn.disabled = true;
@@ -788,7 +881,7 @@ async function saveMappingFromModal() {
                 throw new Error(parseErr(t) || `HTTP ${r.status}`);
             }
         } else {
-            const body = { confidence, source_type: sourceType, notes };
+            const body = { confidence, source_type: sourceType, notes, implementation_status: implStatus, owner, review_date: reviewDate, evidence_notes: evidence };
             const r = await fetch(`${API}/api/mappings/${modalState.mappingId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -848,6 +941,135 @@ function initCoverage() {
             renderMappingTable(_lastCoverageTable);
         });
     });
+
+    document.getElementById('policy-check-btn').addEventListener('click', runPolicyCheck);
+}
+
+// ---------------------------------------------------------------------------
+// Policy Gap Check
+// ---------------------------------------------------------------------------
+
+let _policyCheckTimer = null;
+
+async function runPolicyCheck() {
+    const srcId = document.getElementById('source-fw').value;
+    const tgtId = document.getElementById('target-fw').value;
+    const policyText = document.getElementById('policy-text').value.trim();
+    const statusEl = document.getElementById('policy-check-status');
+    const resultsCard = document.getElementById('policy-results-card');
+    const btn = document.getElementById('policy-check-btn');
+    const timerEl = document.getElementById('policy-check-timer');
+
+    if (!srcId || !tgtId) {
+        statusEl.textContent = 'Run a coverage analysis first to select frameworks.';
+        statusEl.className = 'status error';
+        statusEl.classList.remove('hidden');
+        return;
+    }
+    if (!policyText) {
+        statusEl.textContent = 'Paste a policy document first.';
+        statusEl.className = 'status error';
+        statusEl.classList.remove('hidden');
+        return;
+    }
+
+    btn.classList.add('loading');
+    btn.disabled = true;
+    statusEl.classList.add('hidden');
+    resultsCard.style.display = 'none';
+    timerEl.style.display = 'inline';
+
+    let seconds = 0;
+    timerEl.textContent = 'Running… 0s';
+    _policyCheckTimer = setInterval(() => {
+        seconds++;
+        timerEl.textContent = `Running… ${seconds}s`;
+    }, 1000);
+
+    try {
+        const res = await fetch(`${API}/api/coverage/check-policy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source_framework_id: parseInt(srcId),
+                target_framework_id: parseInt(tgtId),
+                policy_text: policyText,
+                threshold: 0.45,
+            }),
+        });
+
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+        const data = await res.json();
+
+        clearInterval(_policyCheckTimer);
+        timerEl.style.display = 'none';
+
+        if (!data.results || data.results.length === 0) {
+            statusEl.textContent = data.message || 'No results. Make sure there are unmapped controls and the policy has enough text.';
+            statusEl.className = 'status error';
+            statusEl.classList.remove('hidden');
+            return;
+        }
+
+        renderPolicyResults(data);
+        resultsCard.style.display = 'block';
+        resultsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    } catch (err) {
+        clearInterval(_policyCheckTimer);
+        timerEl.style.display = 'none';
+        statusEl.textContent = 'Policy check failed: ' + err.message;
+        statusEl.className = 'status error';
+        statusEl.classList.remove('hidden');
+    } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+function renderPolicyResults(data) {
+    const summaryEl = document.getElementById('policy-summary-chips');
+    const resultsEl = document.getElementById('policy-check-results');
+
+    summaryEl.innerHTML = [
+        `<span class="impl-status-badge status-implemented">${data.covered_count} Covered</span>`,
+        `<span class="impl-status-badge status-partial">${data.possibly_covered_count} Possibly covered</span>`,
+        `<span class="impl-status-badge status-not-implemented">${data.not_covered_count} Not covered</span>`,
+    ].join('');
+
+    const rows = data.results.map(r => {
+        const coverageClass = {
+            covered: 'compliant',
+            possibly_covered: 'undetermined',
+            not_covered: 'non_compliant',
+        }[r.coverage] || '';
+
+        const badgeLabel = {
+            covered: 'Covered',
+            possibly_covered: 'Possibly covered',
+            not_covered: 'Not covered',
+        }[r.coverage] || r.coverage;
+
+        const snippet = r.matching_snippet
+            ? `<div class="result-chunk" style="margin-top:6px;font-style:italic;font-size:12px;color:var(--text-3);">"${esc(r.matching_snippet)}"</div>`
+            : '';
+
+        const explanation = r.explanation && r.coverage !== 'not_covered'
+            ? `<div style="margin-top:4px;font-size:12px;color:var(--text-2);">${esc(r.explanation)}</div>`
+            : '';
+
+        const conf = r.confidence >= 0 ? `<span style="font-size:11px;color:var(--text-3);margin-left:8px;">${Math.round(r.confidence * 100)}% match</span>` : '';
+
+        return `<div class="check-result-item ${coverageClass}" style="margin-bottom:8px;">
+            <span class="result-badge">${badgeLabel}</span>${conf}
+            <div><strong style="font-family:var(--mono);font-size:13px;">${esc(r.control_id)}</strong>
+            <span style="color:var(--text-2);font-size:13px;margin-left:8px;">${esc(r.title)}</span></div>
+            ${snippet}
+            ${explanation}
+        </div>`;
+    }).join('');
+
+    resultsEl.innerHTML = rows;
 }
 
 async function runCoverage() {
@@ -876,6 +1098,9 @@ async function runCoverage() {
             fetch(`${API}/api/coverage?source=${srcId}&target=${tgtId}`),
             fetch(`${API}/api/coverage/table?source=${srcId}&target=${tgtId}`),
         ]);
+
+        if (!coverageRes.ok) throw new Error(`Coverage API ${coverageRes.status}: ${await coverageRes.text()}`);
+        if (!tableRes.ok) throw new Error(`Table API ${tableRes.status}: ${await tableRes.text()}`);
 
         const coverage = await coverageRes.json();
         const table = await tableRes.json();
@@ -914,6 +1139,27 @@ async function runCoverage() {
         document.querySelectorAll('.coverage-link').forEach(el => {
             el.addEventListener('click', () => switchToLookup(el.dataset.id));
         });
+
+        // Show/hide "what's next" card based on gap count
+        const nextNoGaps = document.getElementById('coverage-next-no-gaps');
+        const nextHasGaps = document.getElementById('coverage-next-has-gaps');
+        const gapCountBadge = document.getElementById('gap-count-badge');
+        const policyGapCount = document.getElementById('policy-gap-count');
+        const policyCard = document.getElementById('policy-check-card');
+        const gapDetails = document.getElementById('gap-details');
+
+        if (coverage.unmapped_controls > 0) {
+            if (nextNoGaps) nextNoGaps.style.display = 'none';
+            if (nextHasGaps) nextHasGaps.style.display = '';
+            if (gapCountBadge) gapCountBadge.textContent = coverage.unmapped_controls;
+            if (policyGapCount) policyGapCount.textContent = `${coverage.unmapped_controls} unmapped controls`;
+            if (gapDetails) gapDetails.open = false;
+        } else {
+            if (nextNoGaps) nextNoGaps.style.display = '';
+            if (nextHasGaps) nextHasGaps.style.display = 'none';
+            if (policyGapCount) policyGapCount.textContent = '';
+        }
+        document.getElementById('policy-results-card').style.display = 'none';
     } catch (err) {
         showCoverageStatus('Coverage analysis failed: ' + err.message, 'error');
         ['stat-total', 'stat-mapped', 'stat-unmapped', 'stat-percent'].forEach(id => {
@@ -978,7 +1224,7 @@ function renderMappingTable(table) {
     const countEl = document.getElementById('table-row-count');
 
     if (!table || !table.rows || table.rows.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No data.</p></div>';
+        container.innerHTML = '<div class="empty-state"><p>No data yet. Go to <strong>Coverage</strong>, select two frameworks, and click <strong>Analyze Coverage</strong>.</p></div>';
         if (countEl) countEl.textContent = '';
         return;
     }
@@ -1009,14 +1255,25 @@ function renderMappingTable(table) {
     });
     html += '</tr></thead><tbody>';
 
+    let prevSourceId = null;
     sorted.forEach(r => {
         const isGap = r.source_type === 'gap';
+        const isDupe = r.source_id === prevSourceId && !isGap;
+        prevSourceId = r.source_id;
+
         const typeBadge = isGap
             ? `<span class="badge">gap</span>`
             : `<span class="badge ${r.source_type === 'official' ? 'badge-official' : (r.source_type === 'manual' ? 'badge-manual' : 'badge-ai')}">${esc(r.source_type)}</span>`;
-        html += `<tr>
-            <td>${esc(r.source_id)}</td>
-            <td>${esc(r.source_title)}</td>
+
+        // When the same source control has multiple mappings, dim the
+        // repeated source columns so the continuation is visually clear.
+        const srcClass = isDupe ? ' class="row-continuation"' : '';
+        const srcIdCell = isDupe ? `<td${srcClass}><span class="continuation-mark">↳</span></td>` : `<td>${esc(r.source_id)}</td>`;
+        const srcTitleCell = isDupe ? `<td${srcClass}></td>` : `<td>${esc(r.source_title)}</td>`;
+
+        html += `<tr class="${isDupe ? 'row-dupe' : ''}">
+            ${srcIdCell}
+            ${srcTitleCell}
             <td class="${isGap ? 'gap' : ''}">${isGap ? 'No mapping' : esc(r.target_id)}</td>
             <td>${esc(r.target_title)}</td>
             <td>${typeBadge}</td>
@@ -1076,105 +1333,8 @@ function exportCoverageExcel() {
     window.open(`${API}/api/coverage/export?source=${srcId}&target=${tgtId}`, '_blank');
 }
 
-
 // ---------------------------------------------------------------------------
-// Versions
-// ---------------------------------------------------------------------------
-
-function initVersions() {
-    document.getElementById('version-fw').addEventListener('change', loadTransitions);
-    document.getElementById('version-btn').addEventListener('click', loadVersionChanges);
-}
-
-async function loadTransitions() {
-    const fwId = document.getElementById('version-fw').value;
-    const transSelect = document.getElementById('version-transition');
-    transSelect.innerHTML = '<option value="">Loading...</option>';
-
-    const fw = frameworksCache.find(f => f.id == fwId);
-    if (!fw) return;
-
-    try {
-        const res = await fetch(`${API}/api/versions/${fw.short_name}/transitions`);
-        const transitions = await res.json();
-
-        if (transitions.length === 0) {
-            transSelect.innerHTML = '<option value="">No version changes available</option>';
-            document.getElementById('version-empty').style.display = 'block';
-            document.getElementById('version-results').classList.add('hidden');
-            return;
-        }
-
-        document.getElementById('version-empty').style.display = 'none';
-        transSelect.innerHTML = '';
-        transitions.forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = `${t.old_version}|${t.new_version}`;
-            opt.textContent = `${t.old_version}  \u2192  ${t.new_version}  (${t.change_count} changes)`;
-            transSelect.appendChild(opt);
-        });
-    } catch (err) {
-        transSelect.innerHTML = '<option value="">Error loading transitions</option>';
-    }
-}
-
-async function loadVersionChanges() {
-    const fwId = document.getElementById('version-fw').value;
-    const transition = document.getElementById('version-transition').value;
-    if (!fwId || !transition) return;
-
-    const fw = frameworksCache.find(f => f.id == fwId);
-    const [oldV, newV] = transition.split('|');
-
-    try {
-        const res = await fetch(
-            `${API}/api/versions/${fw.short_name}/changes?from=${encodeURIComponent(oldV)}&to=${encodeURIComponent(newV)}`
-        );
-        const changes = await res.json();
-
-        const resultsDiv = document.getElementById('version-results');
-        resultsDiv.classList.remove('hidden');
-        document.getElementById('version-empty').style.display = 'none';
-
-        const grouped = { added: [], modified: [], renamed: [], removed: [] };
-        changes.forEach(c => {
-            const type = c.change_type.toLowerCase();
-            if (grouped[type]) grouped[type].push(c);
-            else (grouped.modified ||= []).push(c);
-        });
-
-        document.getElementById('stat-added').textContent = grouped.added.length;
-        document.getElementById('stat-modified').textContent = grouped.modified.length;
-        document.getElementById('stat-renamed').textContent = grouped.renamed.length;
-        document.getElementById('stat-removed').textContent = grouped.removed.length;
-
-        let html = '';
-        for (const [type, items] of Object.entries(grouped)) {
-            if (items.length === 0) continue;
-            html += `<div class="change-group ${type}">`;
-            html += `<div class="change-group-title">${type.charAt(0).toUpperCase() + type.slice(1)} (${items.length})</div>`;
-            items.forEach(c => {
-                const ids = type === 'renamed'
-                    ? `${esc(c.old_control_id)} \u2192 ${esc(c.new_control_id)}`
-                    : esc(c.old_control_id || c.new_control_id);
-                html += `<div class="change-item">
-                    <span class="ctrl-id">${ids}</span>
-                    ${c.description ? `<div class="change-desc">${esc(c.description)}</div>` : ''}
-                    ${c.category ? `<span class="cat-badge">${esc(c.category)}</span>` : ''}
-                </div>`;
-            });
-            html += '</div>';
-        }
-
-        document.getElementById('version-changes-list').innerHTML =
-            html || '<div class="empty-state"><p>No changes found.</p></div>';
-    } catch (err) {
-        showToast('Failed to load version changes: ' + err.message, 'error');
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Upload
+// Upload / Import
 // ---------------------------------------------------------------------------
 
 function initUpload() {
@@ -1194,6 +1354,38 @@ function initUpload() {
 
     document.getElementById('parse-btn').addEventListener('click', parseDocument);
     document.getElementById('import-btn').addEventListener('click', importData);
+
+    document.getElementById('create-fw-btn').addEventListener('click', async () => {
+        const name = document.getElementById('new-fw-name').value.trim();
+        const short = document.getElementById('new-fw-short').value.trim();
+        const version = document.getElementById('new-fw-version').value.trim();
+        const statusEl = document.getElementById('create-fw-status');
+
+        if (!name || !short) {
+            statusEl.textContent = 'Full name and short name are required.';
+            statusEl.className = 'status error'; statusEl.classList.remove('hidden'); return;
+        }
+
+        try {
+            const resp = await fetch('/api/frameworks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, short_name: short, version }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Failed');
+
+            statusEl.textContent = `Created: ${data.short_name} (id=${data.id}). Now select it below and upload your file.`;
+            statusEl.className = 'status success'; statusEl.classList.remove('hidden');
+            document.getElementById('new-fw-name').value = '';
+            document.getElementById('new-fw-short').value = '';
+            document.getElementById('new-fw-version').value = '';
+            await loadFrameworks();
+        } catch (e) {
+            statusEl.textContent = 'Error: ' + e.message;
+            statusEl.className = 'status error'; statusEl.classList.remove('hidden');
+        }
+    });
 }
 
 function handleFile(file) {
@@ -1300,6 +1492,8 @@ async function importData() {
         if (result.success) {
             showStatus(`Imported ${result.controls_added} controls and ${result.mappings_added} mappings`, 'success');
             loadFrameworks();
+            const nextSteps = document.getElementById('import-next-steps');
+            if (nextSteps) nextSteps.style.display = '';
         } else {
             showStatus(`Import failed: ${result.error}`, 'error');
         }
@@ -1331,31 +1525,40 @@ function esc(str) {
 
 
 // ---------------------------------------------------------------------------
-// Compliance Tab
+// AI Mapping — Regulation Text
 // ---------------------------------------------------------------------------
 
 (function() {
     const uploadBtn = document.getElementById('reg-upload-btn');
-    const checkBtn = document.getElementById('check-run-btn');
 
-    if (!uploadBtn) return;
+    if (!uploadBtn) {
+        initFrameworkMapping();
+        return;
+    }
 
     let regulations = [];
 
     uploadBtn.addEventListener('click', uploadRegulation);
-    checkBtn.addEventListener('click', runComplianceCheck);
 
-    loadRegulations();
-
-    async function loadRegulations() {
-        try {
-            const resp = await fetch('/api/regulations');
-            regulations = await resp.json();
-            renderRegList();
-            updateRegSelect();
-        } catch(e) {
-            showToast('Could not load regulations.', 'error');
-        }
+    // Demo example buttons
+    const demoRegBtn = document.getElementById('demo-reg-gdpr');
+    const demoBizBtn = document.getElementById('demo-biz-saas');
+    
+    if (demoRegBtn) {
+        demoRegBtn.addEventListener('click', () => {
+            document.getElementById('reg-name').value = 'General Data Protection Regulation';
+            document.getElementById('reg-short').value = 'GDPR';
+            document.getElementById('reg-jurisdiction').value = 'EU';
+            document.getElementById('reg-text').value = DEMO_GDPR_TEXT;
+            showToast('GDPR example loaded. Click "Upload & Analyze" to process.', 'info', 3000);
+        });
+    }
+    
+    if (demoBizBtn) {
+        demoBizBtn.addEventListener('click', () => {
+            document.getElementById('check-business-text').value = DEMO_BUSINESS_TEXT;
+            showToast('SaaS business process loaded. Select a regulation and click "Run Compliance Check".', 'info', 3000);
+        });
     }
 
     async function uploadRegulation() {
@@ -1422,7 +1625,22 @@ function esc(str) {
         }
 
         checkBtn.disabled = true;
-        checkBtn.textContent = 'Checking...';
+        checkBtn.classList.add('loading');
+        checkBtn.textContent = 'Analyzing with AI...';
+        
+        let timerEl = document.getElementById('check-timer');
+        if (!timerEl) {
+            timerEl = document.createElement('div');
+            timerEl.id = 'check-timer';
+            timerEl.className = 'operation-timer';
+            checkBtn.parentNode.insertBefore(timerEl, checkBtn.nextSibling);
+        }
+        const startTime = Date.now();
+        const timerInterval = setInterval(() => {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+            timerEl.textContent = `Processing... ${elapsed}s (AI is reasoning about compliance)`;
+        }, 1000);
+        timerEl.textContent = 'Processing... 0s (AI is reasoning about compliance)';
 
         try {
             const resp = await fetch('/api/compliance/check', {
@@ -1437,7 +1655,11 @@ function esc(str) {
         } catch(e) {
             showComplianceStatus('check-status', 'Check failed: ' + e.message, 'error');
         } finally {
+            clearInterval(timerInterval);
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            timerEl.textContent = `Completed in ${elapsed}s`;
             checkBtn.disabled = false;
+            checkBtn.classList.remove('loading');
             checkBtn.textContent = 'Run Compliance Check';
         }
     }
@@ -1462,6 +1684,7 @@ function esc(str) {
 
     function updateRegSelect() {
         const sel = document.getElementById('check-regulation');
+        if (!sel) return;
         sel.innerHTML = '<option value="">-- Select regulation --</option>' +
             regulations.map(r => `<option value="${r.id}">${esc(r.short_name)} - ${esc(r.name)}</option>`).join('');
     }
@@ -1582,19 +1805,19 @@ function esc(str) {
         tgtSel.innerHTML = opts;
     }
 
-    const origLoadReg = loadRegulations;
-    loadRegulations = async function() {
-        await origLoadReg.call ? origLoadReg() : null;
+    async function loadRegulations() {
         try {
             const resp = await fetch('/api/regulations');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             regulations = await resp.json();
             renderRegList();
             updateRegSelect();
             updateMapSelects();
         } catch(e) {
-            showToast('Could not refresh regulations.', 'error');
+            showToast('Could not load regulations.', 'error');
         }
-    };
+    }
+
     loadRegulations();
 
     async function generateMappings() {
@@ -1663,4 +1886,112 @@ function esc(str) {
             </div>
         `).join('');
     }
+
+    // ── Framework-to-Framework AI Mapping — moved to initFrameworkMapping() below ──
 })();
+
+// ---------------------------------------------------------------------------
+// Framework-to-Framework AI Mapping (standalone, always initialized)
+// ---------------------------------------------------------------------------
+
+function initFrameworkMapping() {
+    const fwMapBtn = document.getElementById('fw-map-btn');
+    const fwMapThreshold = document.getElementById('fw-map-threshold');
+    const fwMapThresholdVal = document.getElementById('fw-map-threshold-val');
+    if (!fwMapBtn) return;
+
+    if (fwMapThreshold) {
+        fwMapThreshold.addEventListener('input', () => {
+            fwMapThresholdVal.textContent = parseFloat(fwMapThreshold.value).toFixed(2);
+        });
+    }
+    fwMapBtn.addEventListener('click', generateFrameworkMappings);
+
+    let _fwMapTimer = null;
+
+    async function generateFrameworkMappings() {
+        const srcId = document.getElementById('fw-map-source').value;
+        const tgtId = document.getElementById('fw-map-target').value;
+        const threshold = parseFloat(document.getElementById('fw-map-threshold').value);
+        const statusEl = document.getElementById('fw-map-status');
+        const timerEl = document.getElementById('fw-map-timer');
+
+        if (!srcId || !tgtId) {
+            statusEl.textContent = 'Select both source and target framework.';
+            statusEl.className = 'status error'; statusEl.classList.remove('hidden'); return;
+        }
+        if (srcId === tgtId) {
+            statusEl.textContent = 'Source and target must be different.';
+            statusEl.className = 'status error'; statusEl.classList.remove('hidden'); return;
+        }
+
+        fwMapBtn.disabled = true;
+        fwMapBtn.classList.add('loading');
+        statusEl.classList.add('hidden');
+        document.getElementById('fw-map-results-card').style.display = 'none';
+        timerEl.style.display = 'inline';
+
+        let secs = 0;
+        timerEl.textContent = 'Running… 0s';
+        _fwMapTimer = setInterval(() => { secs++; timerEl.textContent = `Running… ${secs}s`; }, 1000);
+
+        try {
+            const resp = await fetch('/api/frameworks/generate-mappings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    source_framework_id: parseInt(srcId),
+                    target_framework_id: parseInt(tgtId),
+                    threshold,
+                    top_k: 3,
+                }),
+            });
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.detail || `Server error ${resp.status}`);
+            }
+            const data = await resp.json();
+            clearInterval(_fwMapTimer); timerEl.style.display = 'none';
+            renderFrameworkMappingResults(data);
+        } catch (e) {
+            clearInterval(_fwMapTimer); timerEl.style.display = 'none';
+            statusEl.textContent = 'Generation failed: ' + e.message;
+            statusEl.className = 'status error'; statusEl.classList.remove('hidden');
+        } finally {
+            fwMapBtn.disabled = false;
+            fwMapBtn.classList.remove('loading');
+        }
+    }
+
+    function renderFrameworkMappingResults(data) {
+        const card = document.getElementById('fw-map-results-card');
+        const summary = document.getElementById('fw-map-summary-chips');
+        const preview = document.getElementById('fw-map-preview');
+
+        summary.innerHTML = [
+            `<span class="impl-status-badge status-implemented">${data.mappings_added} new mappings saved</span>`,
+            `<span class="impl-status-badge status-partial">${data.mappings_skipped} already existed</span>`,
+            `<span class="impl-status-badge status-not-assessed">${data.source_controls_checked} controls checked</span>`,
+        ].join('');
+
+        if (!data.preview || data.preview.length === 0) {
+            preview.innerHTML = '<p class="muted">No pairs above threshold. Try lowering the similarity threshold.</p>';
+        } else {
+            preview.innerHTML = data.preview.map(p => {
+                const conf = Math.round(p.confidence * 100);
+                const cls = conf >= 65 ? 'compliant' : 'undetermined';
+                return `<div class="check-result-item ${cls}">
+                    <span class="result-badge">${conf}% match</span>
+                    <div class="map-result-pair">
+                        <div class="map-result-text"><strong style="font-family:var(--mono);font-size:12px;">${esc(p.source)}</strong>&nbsp;${esc(p.source_title)}</div>
+                        <div class="map-arrow">→</div>
+                        <div class="map-result-text"><strong style="font-family:var(--mono);font-size:12px;">${esc(p.target)}</strong>&nbsp;${esc(p.target_title)}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        card.style.display = 'block';
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}

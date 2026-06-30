@@ -10,7 +10,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U compliance"]
+      test: ["CMD-SHELL", "pg_isready -U compliance -d compliance_mapping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -18,7 +18,7 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-compliance}:${POSTGRES_PASSWORD:-compliance_dev}@db:5432/${POSTGRES_DB:-compliance_mapping}
       DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-compliance}:${POSTGRES_PASSWORD:-compliance_dev}@db:5432/${POSTGRES_DB:-compliance_mapping}

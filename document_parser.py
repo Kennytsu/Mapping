@@ -1,40 +1,121 @@
 """
-Document parser for BSI compliance documents.
-Extracts controls and mappings from PDF and Excel files.
+Document parser — pluggable registry for importing controls and mappings.
 
-All public functions accept raw bytes (not Flask/FastAPI file objects)
-so they work from both the upload API and the CLI seed script.
+To add a new format:
+    1. Write a parse function: (content: bytes, doc_type: str) -> ParseOutput
+    2. Register it: register_parser("my_format", [".xlsx", ".csv"], my_parse_fn)
+
+That's it. The upload API picks it up automatically.
 """
 
 import re
 from io import BytesIO
+from dataclasses import dataclass, field
+from typing import Callable, Protocol
 
 import pandas as pd
 import pdfplumber
 
 
 # ---------------------------------------------------------------------------
-# Public entry point
+# Output type — every parser returns this
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ParseOutput:
+    success: bool
+    controls: list[dict] = field(default_factory=list)
+    mappings: list[dict] = field(default_factory=list)
+    raw_text: str = ""
+    error: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "success": self.success,
+            "controls": self.controls,
+            "mappings": self.mappings,
+            "raw_text": self.raw_text,
+            "error": self.error,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Parser registry
+# ---------------------------------------------------------------------------
+
+class ParserFn(Protocol):
+    def __call__(self, content: bytes, doc_type: str) -> ParseOutput: ...
+
+
+@dataclass
+class RegisteredParser:
+    name: str
+    extensions: list[str]
+    parse_fn: ParserFn
+    description: str = ""
+
+
+_PARSERS: list[RegisteredParser] = []
+
+
+def register_parser(
+    name: str,
+    extensions: list[str],
+    parse_fn: ParserFn,
+    description: str = "",
+):
+    """Register a parser. Extensions should include the dot, e.g. ['.pdf', '.xlsx']."""
+    _PARSERS.append(RegisteredParser(
+        name=name,
+        extensions=[e.lower() for e in extensions],
+        parse_fn=parse_fn,
+        description=description,
+    ))
+
+
+def list_parsers() -> list[dict]:
+    """Return metadata about all registered parsers (useful for UI dropdowns)."""
+    return [
+        {"name": p.name, "extensions": p.extensions, "description": p.description}
+        for p in _PARSERS
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Public entry point — routes call this
 # ---------------------------------------------------------------------------
 
 def parse_uploaded_bytes(content: bytes, filename: str, doc_type: str) -> dict:
-    """Parse raw file bytes and return controls/mappings."""
-    filename = filename.lower()
-    try:
-        if filename.endswith(".pdf"):
-            return parse_bsi_zuordnung_pdf(content, doc_type)
-        elif filename.endswith((".xlsx", ".xls")):
-            return parse_excel(content, doc_type)
-        elif filename.endswith(".csv"):
-            return parse_csv(content, doc_type)
-        else:
-            return {"success": False, "error": f"Unsupported file type: {filename}"}
-    except Exception as e:
-        return {"success": False, "error": str(e), "raw_text": ""}
+    """Parse raw file bytes. Finds the right parser by extension, then by doc_type."""
+    filename_lower = filename.lower()
+    ext = "." + filename_lower.rsplit(".", 1)[-1] if "." in filename_lower else ""
+
+    # First: try to match by doc_type name (explicit user selection)
+    for parser in _PARSERS:
+        if parser.name.lower() == doc_type.lower():
+            try:
+                return parser.parse_fn(content, doc_type).to_dict()
+            except Exception as e:
+                return ParseOutput(success=False, error=str(e)).to_dict()
+
+    # Second: fall back to extension matching
+    for parser in _PARSERS:
+        if ext in parser.extensions:
+            try:
+                return parser.parse_fn(content, doc_type).to_dict()
+            except Exception as e:
+                return ParseOutput(success=False, error=str(e)).to_dict()
+
+    return ParseOutput(success=False, error=f"No parser for: {filename} (type={doc_type})").to_dict()
+
+
+# ===========================================================================
+# Built-in parsers
+# ===========================================================================
 
 
 # ---------------------------------------------------------------------------
-# BSI Zuordnungstabelle PDF parser
+# BSI Zuordnungstabelle PDF
 # ---------------------------------------------------------------------------
 
 _ISO_PATTERN = re.compile(r"A\.(\d+)\.(\d+)")
@@ -43,7 +124,6 @@ _BSI_MODULE_PATTERN = re.compile(r"\b([A-Z]{2,5}\.\d+(?:\.\d+)?)\b")
 _BSI_STD_PATTERN = re.compile(r"(BSI-Standard\s+200-[1-4])")
 _CLAUSE_START = re.compile(r"^(\d+(?:\.\d+)*)\s+[A-Z]")
 
-# Only emit module controls whose prefix matches a real BSI IT-Grundschutz topic layer
 _BSI_MODULE_PREFIXES = {
     "ISMS", "ORP", "CON", "OPS", "APP", "SYS", "IND", "INF", "DER", "NET", "TNA",
 }
@@ -57,7 +137,7 @@ _BSI_STD_TITLES = {
 }
 
 
-def parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> dict:
+def _parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> ParseOutput:
     """
     Parse BSI Zuordnungstabelle PDF.
     Handles both:
@@ -94,7 +174,6 @@ def parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> dict:
             mappings.append({"source": iso_ctrl, "target": bsi_ctrl})
 
     def _extract_std_refs(text_block: str) -> list[str]:
-        """Extract BSI-Standard control IDs from a text block."""
         refs = []
         for m in _BSI_STD_PATTERN.finditer(text_block):
             raw = m.group(1)
@@ -108,7 +187,6 @@ def parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> dict:
                 refs.append("BSI-ElemGef")
         return refs
 
-    # Pre-create BSI-Standard controls
     for ctrl_id, title in _BSI_STD_TITLES.items():
         if ctrl_id not in seen_bsi:
             seen_bsi.add(ctrl_id)
@@ -118,7 +196,7 @@ def parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> dict:
                 "category": "BSI-Standard",
             })
 
-    # --- Pass 1: Parse clause section (ISO clauses 1-10 -> BSI-Standards) ---
+    # Pass 1: Clause section (ISO clauses 1-10 -> BSI-Standards)
     lines = full_text.split("\n")
     current_clause = None
     clause_buffer: list[str] = []
@@ -153,7 +231,7 @@ def parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> dict:
 
     _flush_clause()
 
-    # --- Pass 2: Annex A section (A.X.Y -> IT-Grundschutz requirements) ---
+    # Pass 2: Annex A section (A.X.Y -> IT-Grundschutz requirements)
     sections = re.split(r"(A\.\d+\.\d+\s)", full_text)
     current_iso = None
     for section in sections:
@@ -190,16 +268,16 @@ def parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> dict:
             for bsi_ctrl in _BSI_REQ_PATTERN.findall(line):
                 _add_bsi(bsi_ctrl, current_iso)
 
-    return {
-        "success": True,
-        "controls": controls,
-        "mappings": mappings,
-        "raw_text": full_text[:10000],
-    }
+    return ParseOutput(
+        success=True,
+        controls=controls,
+        mappings=mappings,
+        raw_text=full_text[:10000],
+    )
 
 
 # ---------------------------------------------------------------------------
-# C5 / generic Excel parser
+# Excel parser (C5, generic cross-reference tables)
 # ---------------------------------------------------------------------------
 
 _C5_REF_PATTERN = re.compile(r"([A-Z]{2,4})-(\d{2})")
@@ -208,32 +286,19 @@ _ISO_CLAUSE_PATTERN = re.compile(r"(\d+\.\d+)")
 
 
 def _extract_iso_refs(raw: str) -> list[str]:
-    """
-    Extract individual ISO 27001 references from a cell that may contain:
-      - Specific controls: 'A.5.1', 'A.8.12'
-      - Clause ranges: '4.1 - 10.2'
-      - Multiple values separated by newlines or commas
-      - Dashes meaning 'no mapping'
-    """
+    """Extract ISO 27001 references from a cell (handles ranges, dashes, etc)."""
     if not raw or raw.strip() in ("-", "n/a", "nan", ""):
         return []
-
     refs: list[str] = []
-    # Annex A controls
     refs.extend(_ISO_ANNEX_PATTERN.findall(raw))
-    # Clause references (non-Annex), e.g. "6.2", "4.3"
     for clause in _ISO_CLAUSE_PATTERN.findall(raw):
-        full = clause
-        if full not in refs and not any(full in r for r in refs):
-            refs.append(full)
+        if clause not in refs and not any(clause in r for r in refs):
+            refs.append(clause)
     return refs
 
 
-def parse_excel(content: bytes, doc_type: str) -> dict:
-    """
-    Parse an Excel file for controls and mappings.
-    Handles C5:2020 format (merged title row, actual headers on row 2).
-    """
+def _parse_excel(content: bytes, doc_type: str) -> ParseOutput:
+    """Parse Excel for controls and mappings. Handles C5:2020 format."""
     controls: list[dict] = []
     mappings: list[dict] = []
     seen_mappings: set[tuple] = set()
@@ -254,7 +319,6 @@ def parse_excel(content: bytes, doc_type: str) -> dict:
             continue
 
         df = pd.read_excel(xlsx, sheet_name=sheet_name, header=header_row)
-        # Deduplicate column names: rename duplicate by appending _N
         seen_cols: dict[str, int] = {}
         new_cols = []
         for c in df.columns:
@@ -285,7 +349,6 @@ def parse_excel(content: bytes, doc_type: str) -> dict:
             if not ref_val or ref_val == "nan":
                 continue
 
-            # Determine control format
             if "C5" in doc_type or _C5_REF_PATTERN.match(ref_val):
                 ctrl_id = ref_val
                 cat_match = _C5_REF_PATTERN.match(ref_val)
@@ -310,16 +373,15 @@ def parse_excel(content: bytes, doc_type: str) -> dict:
                     seen_mappings.add(key)
                     mappings.append({"source": iso_ref, "target": ctrl_id})
 
-    return {
-        "success": True,
-        "controls": controls,
-        "mappings": mappings,
-        "raw_text": f"Parsed {len(xlsx.sheet_names)} sheets, {len(controls)} controls, {len(mappings)} mappings",
-    }
+    return ParseOutput(
+        success=True,
+        controls=controls,
+        mappings=mappings,
+        raw_text=f"Parsed {len(xlsx.sheet_names)} sheets, {len(controls)} controls, {len(mappings)} mappings",
+    )
 
 
 def _safe_str(row, col) -> str:
-    """Safely extract a string value from a row, handling NaN and Series."""
     if col is None:
         return ""
     val = row.get(col)
@@ -333,7 +395,6 @@ def _safe_str(row, col) -> str:
 
 
 def _find_header_row(df: pd.DataFrame, max_rows: int = 5) -> int | None:
-    """Scan the first few rows to find the actual header row by best keyword match count."""
     keywords = ("ref", "title", "criteria", "description")
     best_row = None
     best_score = 0
@@ -347,7 +408,6 @@ def _find_header_row(df: pd.DataFrame, max_rows: int = 5) -> int | None:
 
 
 def _detect_columns(columns: list[str], doc_type: str) -> dict | None:
-    """Map column names to semantic roles."""
     result: dict = {}
     ref_count = 0
 
@@ -357,7 +417,6 @@ def _detect_columns(columns: list[str], doc_type: str) -> dict | None:
             if ref_count == 0:
                 result.setdefault("ref", col)
             else:
-                # Second "Ref" column is likely ISO ref (C5 format)
                 result.setdefault("iso", col)
             ref_count += 1
         elif "title" in low:
@@ -370,7 +429,6 @@ def _detect_columns(columns: list[str], doc_type: str) -> dict | None:
     if "ref" in result and "iso" in result:
         return result
 
-    # Positional fallback: col0=ref, col1=title, col2=desc, col3=iso
     if len(columns) >= 4:
         return {
             "ref": columns[0],
@@ -383,11 +441,11 @@ def _detect_columns(columns: list[str], doc_type: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# CSV parser
+# CSV parser (simple source/target columns)
 # ---------------------------------------------------------------------------
 
-def parse_csv(content: bytes, doc_type: str) -> dict:
-    """Parse a CSV file for controls and mappings."""
+def _parse_csv(content: bytes, doc_type: str) -> ParseOutput:
+    """Parse a CSV with source/target columns for mappings."""
     df = pd.read_csv(BytesIO(content))
     controls: list[dict] = []
     mappings: list[dict] = []
@@ -416,9 +474,313 @@ def parse_csv(content: bytes, doc_type: str) -> dict:
                         "category": "",
                     })
 
-    return {
-        "success": True,
-        "controls": controls,
-        "mappings": mappings,
-        "raw_text": f"Parsed {len(df)} rows, columns: {list(df.columns)}",
-    }
+    return ParseOutput(
+        success=True,
+        controls=controls,
+        mappings=mappings,
+        raw_text=f"Parsed {len(df)} rows, columns: {list(df.columns)}",
+    )
+
+
+# ---------------------------------------------------------------------------
+# BSI C5:2020 PDF parser
+# ---------------------------------------------------------------------------
+
+_C5_CRITERION_PATTERN = re.compile(
+    r"\b([A-Z]{2,4}-\d{2})\b"
+)
+_C5_DOMAINS = {
+    "OIS": "Organisation of Information Security",
+    "AM": "Asset Management",
+    "ATM": "Attack and Threat Management",
+    "SIM": "Security Incident Management",
+    "COS": "Cryptography and Operational Security",
+    "SCC": "Supply Chain and Contractor Management",
+    "PI": "Physical Infrastructure",
+    "RB": "Regulated Borders",
+    "KOS": "Key Management and Operation Security",
+    "BCM": "Business Continuity Management",
+    "SLA": "Service Levels",
+    "SP": "Service Provisioning",
+    "SA": "Security Architecture",
+    "INF": "Infrastructure and Network",
+    "ICT": "ICT Infrastructure",
+}
+
+
+def _parse_c5_pdf(content: bytes, doc_type: str) -> ParseOutput:
+    """Parse BSI C5:2020 standalone PDF.
+
+    Extracts criteria IDs (OIS-01, AM-01, …) with titles and descriptions
+    by scanning each page for the pattern DOMAIN-NN followed by text content.
+    Also extracts ISO 27001 cross-references where present.
+    """
+    controls: list[dict] = []
+    mappings: list[dict] = []
+    seen_ids: set[str] = set()
+    seen_mappings: set[tuple] = set()
+    all_text_parts: list[str] = []
+
+    with pdfplumber.open(BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            # Try table extraction first (C5 uses tables)
+            tables = page.extract_tables() or []
+            for table in tables:
+                for row in table:
+                    if not row:
+                        continue
+                    cells = [str(c).strip() if c else "" for c in row]
+                    # First non-empty cell is usually the criterion ID
+                    ctrl_id = ""
+                    title = ""
+                    description = ""
+                    iso_refs: list[str] = []
+
+                    for i, cell in enumerate(cells):
+                        m = _C5_CRITERION_PATTERN.match(cell)
+                        if m and m.group(1) in cell and len(cell) < 20:
+                            ctrl_id = m.group(1)
+                        elif ctrl_id and not title and len(cell) > 3 and len(cell) < 200:
+                            title = cell
+                        elif ctrl_id and not description and len(cell) > 10:
+                            description = cell[:500]
+                        # Look for ISO refs in any cell
+                        iso_refs.extend(_ISO_ANNEX_PATTERN.findall(cell))
+
+                    if ctrl_id and ctrl_id not in seen_ids:
+                        seen_ids.add(ctrl_id)
+                        cat_match = re.match(r"([A-Z]+)", ctrl_id)
+                        domain_prefix = cat_match.group(1) if cat_match else ""
+                        controls.append({
+                            "control_id": ctrl_id,
+                            "title": title or f"C5 {ctrl_id}",
+                            "description": description,
+                            "category": _C5_DOMAINS.get(domain_prefix, domain_prefix),
+                        })
+                        for iso_ref in set(iso_refs):
+                            key = (iso_ref, ctrl_id)
+                            if key not in seen_mappings:
+                                seen_mappings.add(key)
+                                mappings.append({"source": iso_ref, "target": ctrl_id})
+
+            # Also grab raw text for text-based fallback
+            text = page.extract_text() or ""
+            all_text_parts.append(text)
+
+    # Text-based fallback if tables yielded nothing
+    if not controls:
+        full_text = "\n".join(all_text_parts)
+        lines = full_text.split("\n")
+        current_id = None
+        current_title = ""
+        current_desc_lines: list[str] = []
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            m = re.match(r"^([A-Z]{2,4}-\d{2})\s+(.*)", line)
+            if m:
+                # Save previous
+                if current_id and current_id not in seen_ids:
+                    seen_ids.add(current_id)
+                    cat_match = re.match(r"([A-Z]+)", current_id)
+                    domain_prefix = cat_match.group(1) if cat_match else ""
+                    controls.append({
+                        "control_id": current_id,
+                        "title": current_title,
+                        "description": " ".join(current_desc_lines)[:500],
+                        "category": _C5_DOMAINS.get(domain_prefix, domain_prefix),
+                    })
+                current_id = m.group(1)
+                current_title = m.group(2)[:200]
+                current_desc_lines = []
+            elif current_id and len(line) > 10:
+                iso_refs = _ISO_ANNEX_PATTERN.findall(line)
+                for iso_ref in iso_refs:
+                    key = (iso_ref, current_id)
+                    if key not in seen_mappings:
+                        seen_mappings.add(key)
+                        mappings.append({"source": iso_ref, "target": current_id})
+                current_desc_lines.append(line)
+
+        if current_id and current_id not in seen_ids:
+            cat_match = re.match(r"([A-Z]+)", current_id)
+            domain_prefix = cat_match.group(1) if cat_match else ""
+            controls.append({
+                "control_id": current_id,
+                "title": current_title,
+                "description": " ".join(current_desc_lines)[:500],
+                "category": _C5_DOMAINS.get(domain_prefix, domain_prefix),
+            })
+
+    full_text = "\n".join(all_text_parts)
+    return ParseOutput(
+        success=True,
+        controls=controls,
+        mappings=mappings,
+        raw_text=full_text[:5000],
+    )
+
+
+# ---------------------------------------------------------------------------
+# BSI IT-Grundschutz Kompendium module PDF parser (individual module PDFs)
+# ---------------------------------------------------------------------------
+
+_BSI_MODULE_ID_RE = re.compile(
+    r"^([A-Z]{2,5}\.\d+(?:\.\d+)?)\s+(.+)"
+)
+_BSI_REQUIREMENT_RE = re.compile(
+    r"^([A-Z]{2,5}\.\d+(?:\.\d+)?\.A\d+)\s+(.+?)(?:\s+\[.+?\])?\s*\(([BSH])\)\s*$"
+)
+_BSI_REQUIREMENT_LOOSE = re.compile(
+    r"([A-Z]{2,5}\.\d+(?:\.\d+)?\.A\d+)\s+([^\n]{5,120})"
+)
+_PROTECTION_LEVEL = {"B": "Basic", "S": "Standard", "H": "High"}
+
+
+def _parse_bsi_module_pdf(content: bytes, doc_type: str) -> ParseOutput:
+    """Parse a BSI IT-Grundschutz Kompendium module PDF (individual module file).
+
+    Extracts requirements (APP.1.1.A1 …) with titles, protection levels (B/S/H),
+    and descriptions. No mappings are produced — use the Zuordnungstabelle for those.
+    """
+    controls: list[dict] = []
+    seen_ids: set[str] = set()
+    all_text_parts: list[str] = []
+
+    with pdfplumber.open(BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            all_text_parts.append(text)
+
+    full_text = "\n".join(all_text_parts)
+    lines = full_text.split("\n")
+
+    module_id = ""
+    module_title = ""
+    # Try to detect the module ID from the first few lines
+    for line in lines[:20]:
+        m = _BSI_MODULE_ID_RE.match(line.strip())
+        if m:
+            prefix = m.group(1).split(".")[0]
+            if prefix in _BSI_MODULE_PREFIXES and ".A" not in m.group(1):
+                module_id = m.group(1)
+                module_title = m.group(2).strip()
+                break
+
+    current_req_id = None
+    current_req_title = ""
+    current_level = ""
+    current_desc_lines: list[str] = []
+
+    def _flush_req():
+        if current_req_id and current_req_id not in seen_ids:
+            seen_ids.add(current_req_id)
+            controls.append({
+                "control_id": current_req_id,
+                "title": current_req_title,
+                "description": " ".join(current_desc_lines)[:600],
+                "category": module_id or current_req_id.rsplit(".A", 1)[0],
+                "protection_level": _PROTECTION_LEVEL.get(current_level, current_level),
+            })
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Strict pattern: "APP.1.1.A1 Title [Role] (B)"
+        m = _BSI_REQUIREMENT_RE.match(stripped)
+        if m:
+            _flush_req()
+            current_req_id = m.group(1)
+            current_req_title = m.group(2).strip()
+            current_level = m.group(3)
+            current_desc_lines = []
+            continue
+
+        # Loose pattern: "APP.1.1.A1 Title ..." without protection level at end
+        m2 = _BSI_REQUIREMENT_LOOSE.match(stripped)
+        if m2 and ".A" in m2.group(1):
+            _flush_req()
+            current_req_id = m2.group(1)
+            current_req_title = m2.group(2).strip()
+            current_level = ""
+            current_desc_lines = []
+            continue
+
+        if current_req_id:
+            # Stop accumulating description when hitting the next section header
+            if re.match(r"^\d+(\.\d+)*\s+[A-Z]", stripped) and len(stripped) < 60:
+                _flush_req()
+                current_req_id = None
+                current_desc_lines = []
+            else:
+                current_desc_lines.append(stripped)
+
+    _flush_req()
+
+    return ParseOutput(
+        success=len(controls) > 0,
+        controls=controls,
+        mappings=[],
+        raw_text=full_text[:5000],
+        error="" if controls else "No BSI requirements found. Check that this is a BSI IT-Grundschutz module PDF.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Register built-in parsers
+# ---------------------------------------------------------------------------
+
+register_parser(
+    name="BSI Zuordnungstabelle",
+    extensions=[".pdf"],
+    parse_fn=_parse_bsi_zuordnung_pdf,
+    description="BSI IT-Grundschutz Zuordnungstabelle (ISO 27001 ↔ BSI mapping PDF)",
+)
+
+register_parser(
+    name="C5 PDF",
+    extensions=[".pdf"],
+    parse_fn=_parse_c5_pdf,
+    description="BSI C5:2020 standalone criteria PDF (extracts C5 criteria + ISO cross-refs)",
+)
+
+register_parser(
+    name="BSI IT-Grundschutz Module",
+    extensions=[".pdf"],
+    parse_fn=_parse_bsi_module_pdf,
+    description="BSI IT-Grundschutz Kompendium individual module PDF (e.g. APP.1.1, SYS.1.2)",
+)
+
+register_parser(
+    name="C5 Cross-Reference",
+    extensions=[".xlsx", ".xls"],
+    parse_fn=_parse_excel,
+    description="BSI C5 or generic Excel cross-reference table",
+)
+
+register_parser(
+    name="CSV Mapping",
+    extensions=[".csv"],
+    parse_fn=_parse_csv,
+    description="Simple CSV with source/target control ID columns",
+)
+
+
+# ---------------------------------------------------------------------------
+# Legacy aliases (so existing imports still work)
+# ---------------------------------------------------------------------------
+
+def parse_bsi_zuordnung_pdf(content: bytes, doc_type: str) -> dict:
+    return _parse_bsi_zuordnung_pdf(content, doc_type).to_dict()
+
+
+def parse_excel(content: bytes, doc_type: str) -> dict:
+    return _parse_excel(content, doc_type).to_dict()
+
+
+def parse_csv(content: bytes, doc_type: str) -> dict:
+    return _parse_csv(content, doc_type).to_dict()

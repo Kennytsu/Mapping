@@ -1,0 +1,127 @@
+INFORMATION SECURITY POLICY — ACME Corp (v2.1, effective 2025-01-01)
+======================================================================
+Internal document — not for external distribution.
+
+1. PURPOSE AND SCOPE
+This policy establishes the information security requirements for all systems,
+data, and personnel at ACME Corp. It applies to all employees, contractors,
+and third-party service providers who access ACME systems or handle ACME data.
+The Chief Information Security Officer (CISO) is responsible for maintaining
+this policy and conducting an annual review.
+
+2. ACCESS CONTROL
+2.1  All users are assigned a unique username and password. Shared accounts are
+     prohibited. Passwords must be at least 12 characters and include uppercase,
+     lowercase, a digit, and a special character.
+2.2  Multi-factor authentication (MFA) is mandatory for all remote access, all
+     administrator accounts, and any system that stores personal data.
+2.3  Access rights are granted on a least-privilege basis and reviewed every
+     six months by the system owner. Permissions are revoked within 24 hours of
+     an employee's departure.
+2.4  Privileged access (root, admin) requires a separate account and must be
+     documented in the access register.
+
+3. DATA CLASSIFICATION AND ASSET MANAGEMENT
+3.1  All information assets must be registered in the Asset Inventory maintained
+     by IT Operations. Each asset is assigned an owner who is responsible for
+     its classification and protection.
+3.2  Data is classified as Public, Internal, Confidential, or Restricted.
+     Confidential and Restricted data must not be stored on personal devices
+     without explicit approval and encryption.
+3.3  Assets leaving the organisation must be approved by the asset owner and
+     logged. Media containing Confidential or Restricted data must be securely
+     wiped or destroyed before disposal.
+
+4. CRYPTOGRAPHY AND DATA PROTECTION
+4.1  All data classified as Confidential or Restricted must be encrypted at
+     rest using AES-256 or equivalent. Encryption keys are managed through the
+     company key management system and rotated annually.
+4.2  All data in transit must use TLS 1.2 or higher. Unencrypted protocols
+     (FTP, HTTP, Telnet) are prohibited on production systems.
+4.3  Cryptographic controls are reviewed annually to ensure they remain
+     adequate given current threat intelligence.
+
+5. INCIDENT MANAGEMENT
+5.1  Any suspected or confirmed security incident must be reported to the
+     Security Operations Centre (SOC) immediately using the incident reporting
+     form at security@acme.com or the internal ticketing system.
+5.2  All incidents are logged, triaged, and assigned a severity level (P1–P4)
+     within two hours of detection.
+5.3  A post-incident review is conducted for all P1 and P2 incidents within
+     five business days. Findings and corrective actions are documented.
+5.4  Personal data breaches affecting EU residents must be reported to the
+     relevant supervisory authority within 72 hours of discovery.
+
+6. VULNERABILITY AND PATCH MANAGEMENT
+6.1  IT systems are scanned for vulnerabilities at least monthly using an
+     approved scanning tool. Critical and high vulnerabilities must be
+     remediated within 30 days. Medium vulnerabilities within 90 days.
+6.2  Security patches are applied according to the Patch Management Procedure.
+     Emergency patches for actively exploited vulnerabilities are applied
+     within 48 hours.
+6.3  Penetration tests are conducted at least annually for internet-facing
+     systems and after significant changes.
+
+7. NETWORK SECURITY
+7.1  The network is segmented into zones (external DMZ, internal, management).
+     Traffic between zones is controlled by firewalls with default-deny rules.
+7.2  Remote access is permitted only through the company VPN with MFA enabled.
+7.3  Network traffic is monitored and logs are retained for a minimum of 90 days.
+7.4  Wireless networks use WPA3 encryption. Guest networks are isolated from
+     the internal network.
+
+8. OPERATIONS SECURITY
+8.1  All production systems must have documented operational procedures covering
+     startup, shutdown, backup, and error handling.
+8.2  Antivirus and endpoint detection and response (EDR) software must be
+     installed and kept up to date on all endpoints.
+8.3  System logs (authentication, access, errors) are collected centrally and
+     monitored. Logs are retained for at least 12 months and backed up offsite.
+8.4  Production, test, and development environments are separated. Production
+     data may not be used in development or test environments without
+     anonymisation.
+8.5  Capacity planning reviews are conducted quarterly to ensure systems can
+     meet current and projected demands.
+
+9. HUMAN RESOURCES SECURITY
+9.1  Background checks are performed for all new employees in roles with access
+     to Confidential or Restricted data prior to commencement.
+9.2  All employees receive information security awareness training within 30 days
+     of joining and annually thereafter.
+9.3  Employees are required to read and sign this policy and the Acceptable Use
+     Policy on joining. Violations may result in disciplinary action.
+9.4  Upon termination or role change, access rights are reviewed and adjusted
+     immediately. Company equipment must be returned on the last day.
+
+10. BACKUP AND RECOVERY
+10.1 All critical data is backed up daily. Backups are stored in an encrypted,
+     geographically separate location.
+10.2 Backup integrity is verified monthly through test restores. Results are
+     documented in the Backup Register.
+10.3 Recovery Time Objectives (RTO) and Recovery Point Objectives (RPO) are
+     defined per system and reviewed annually.
+
+11. THIRD-PARTY AND SUPPLIER SECURITY
+11.1 All suppliers processing ACME data or having access to ACME systems must
+     complete a security questionnaire before onboarding.
+11.2 Contracts with suppliers must include data protection clauses aligned with
+     applicable law and security requirements.
+11.3 Supplier security posture is reviewed annually. High-risk suppliers may
+     be subject to on-site audits.
+
+12. PHYSICAL AND ENVIRONMENTAL SECURITY
+12.1 Access to server rooms and data centres is restricted to authorised
+     personnel. Entry is logged using badge readers.
+12.2 Visitors to secure areas must be accompanied by an authorised employee
+     and logged in the visitor register.
+
+13. COMPLIANCE AND AUDIT
+13.1 ACME will maintain compliance with applicable laws and regulations
+     including GDPR, and relevant industry standards.
+13.2 Internal audits of information security controls are conducted annually.
+     Findings are reported to senior management and tracked to closure.
+13.3 Employees must not deliberately attempt to circumvent security controls.
+     Any identified weaknesses must be reported to the CISO immediately.
+
+Document owner: CISO
+Next review date: 2026-01-01

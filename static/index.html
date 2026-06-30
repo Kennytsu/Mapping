@@ -7,8 +7,8 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%230f62fe'/><path d='M30 25h-8a6 6 0 00-6 6v12m20-18h28a6 6 0 016 6v12M30 25v50m0 0h28a6 6 0 006-6V43M30 75h-8a6 6 0 01-6-6V43m0 0h56' fill='none' stroke='white' stroke-width='6'/></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=14">
 </head>
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -42,23 +42,23 @@
         <nav class="tabs" role="tablist" aria-label="Main navigation">
             <button class="tab active" data-tab="lookup" role="tab" id="tab-lookup" aria-selected="true" aria-controls="lookup">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
-                Control Lookup
+                Lookup
             </button>
             <button class="tab" data-tab="coverage" role="tab" id="tab-coverage" aria-selected="false" aria-controls="coverage">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
                 Coverage
             </button>
-            <button class="tab" data-tab="versions" role="tab" id="tab-versions" aria-selected="false" aria-controls="versions">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"/></svg>
-                Versions
+            <button class="tab" data-tab="mappings" role="tab" id="tab-mappings" aria-selected="false" aria-controls="mappings">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h8a1 1 0 100-2H3z"/></svg>
+                Mappings
             </button>
             <button class="tab" data-tab="upload" role="tab" id="tab-upload" aria-selected="false" aria-controls="upload">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"/></svg>
-                Upload
+                Import
             </button>
-            <button class="tab" data-tab="compliance" role="tab" id="tab-compliance" aria-selected="false" aria-controls="compliance">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5C17.944 5.66 18 6.324 18 7c0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.676.056-1.34.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Compliance
+            <button class="tab" data-tab="ai-mapping" role="tab" id="tab-ai-mapping" aria-selected="false" aria-controls="ai-mapping">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-1a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v1h-3zM4.75 14.094A5.973 5.973 0 004 17v1H1v-1a3 3 0 013.75-2.906z"/></svg>
+                AI Mapping
             </button>
         </nav>
 
@@ -143,114 +143,158 @@
                         <div class="stat-card accent-blue"><div class="stat-value" id="stat-percent">-</div><div class="stat-label">Coverage</div></div>
                     </div>
                     <div class="progress-track"><div class="progress-fill" id="coverage-bar"></div></div>
-                    <div class="two-col">
-                        <div class="card">
-                            <h3>Unmapped Source Controls <span id="unmapped-count" class="count-badge"></span></h3>
-                            <div id="unmapped-list" class="scroll-list"></div>
+
+                    <!-- What next — always shown, changes based on gap count -->
+                    <div class="next-steps-card card" id="coverage-next-steps">
+                        <div id="coverage-next-no-gaps" style="display:none;">
+                            <strong>Full coverage.</strong> Every source control is mapped.
+                            <button class="wf-link btn-link" data-tab="mappings">View Mappings →</button>
                         </div>
-                        <div class="card">
-                            <h3>Target Gaps <span id="gap-count" class="count-badge"></span></h3>
-                            <div id="gap-list" class="scroll-list"></div>
+                        <div id="coverage-next-has-gaps" style="display:none;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                                <span id="gap-count-badge" class="count-badge accent-amber"></span>
+                                <strong>unmapped controls.</strong> Fix them:
+                            </div>
+                            <div class="gap-action-btns">
+                                <button class="btn-primary wf-link" data-tab="ai-mapping">Generate AI Mappings →</button>
+                                <span class="gap-action-or">or</span>
+                                <button class="btn-secondary wf-link" data-tab="mappings">Edit mappings manually →</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="card">
+
+                    <!-- Policy gap check — shown immediately after stats when gaps exist -->
+                    <div class="card" id="policy-check-card">
                         <div class="card-header-row">
-                            <h3>Full Mapping Table <span id="table-row-count" class="count-badge"></span></h3>
-                            <div class="btn-group">
-                                <button id="export-csv-btn" class="btn-secondary">Export CSV</button>
-                                <button id="export-xlsx-btn" class="btn-secondary">Export Excel</button>
-                            </div>
+                            <h3>Check Your Policy Against Gaps</h3>
+                            <span class="card-badge" id="policy-gap-count"></span>
                         </div>
-                        <div class="table-toolbar">
-                            <div class="search-field table-search">
-                                <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
-                                <input type="text" id="table-search-input" placeholder="Filter table by ID or title">
-                            </div>
-                            <div class="filter-chips" id="table-filter-chips">
-                                <button class="chip active" data-filter="all">All</button>
-                                <button class="chip" data-filter="mapped">Mapped</button>
-                                <button class="chip" data-filter="gap">Gaps</button>
-                                <button class="chip" data-filter="strong">Strong</button>
-                                <button class="chip" data-filter="partial">Partial</button>
-                                <button class="chip" data-filter="weak">Weak</button>
-                            </div>
+                        <p class="card-description">Paste your security policy or internal process documentation. The tool will check which unmapped controls might already be addressed by your existing policies — before you add a formal mapping.</p>
+                        <div class="field">
+                            <label for="policy-text">Policy / Process Document</label>
+                            <textarea id="policy-text" rows="6" placeholder="Paste your information security policy, privacy policy, SOC 2 description, or vendor DPA here..."></textarea>
                         </div>
-                        <div id="mapping-table-container" class="table-wrap"></div>
+                        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;">
+                            <button id="policy-check-btn" class="btn-primary">Run Policy Check</button>
+                            <span id="policy-check-timer" class="operation-timer" style="display:none;"></span>
+                        </div>
+                        <div id="policy-check-status" class="status hidden" aria-live="polite"></div>
                     </div>
+
+                    <div id="policy-results-card" class="card" style="display:none;">
+                        <div class="card-header-row">
+                            <h3>Policy Coverage Results</h3>
+                            <div id="policy-summary-chips" style="display:flex;gap:8px;"></div>
+                        </div>
+                        <p class="card-description" style="margin-bottom:16px;">Controls sorted by how well your policy covers them. <strong>Covered</strong> = strong match (&ge;0.65). <strong>Possibly</strong> = partial match. <strong>Not covered</strong> = no relevant text found.</p>
+                        <div id="policy-check-results"></div>
+                    </div>
+
+                    <!-- Gap detail lists — below the actionable section -->
+                    <details class="gap-detail-section" id="gap-details">
+                        <summary>Show gap details</summary>
+                        <div class="two-col" style="margin-top:12px;">
+                            <div class="card">
+                                <h3>Unmapped Controls <span id="unmapped-count" class="count-badge"></span></h3>
+                                <div id="unmapped-list" class="scroll-list"></div>
+                            </div>
+                            <div class="card">
+                                <h3>Target Gaps <span id="gap-count" class="count-badge"></span></h3>
+                                <div id="gap-list" class="scroll-list"></div>
+                            </div>
+                        </div>
+                    </details>
                 </div>
             </section>
 
-            <!-- Version Tracking -->
-            <section id="versions" class="tab-panel" role="tabpanel" aria-labelledby="tab-versions">
+            <!-- Mappings table -->
+            <section id="mappings" class="tab-panel" role="tabpanel" aria-labelledby="tab-mappings">
                 <div class="panel-header">
-                    <h2>Version Tracking</h2>
-                    <p>Track changes between framework versions to ease migration.</p>
+                    <h2>Mappings</h2>
+                    <p>Browse, filter, and export every control mapping. Run a <button class="btn-link wf-link" data-tab="coverage">Coverage Analysis</button> first to populate this table.</p>
                 </div>
-
-                <div class="controls-row">
-                    <div class="field">
-                        <label for="version-fw">Framework</label>
-                        <select id="version-fw"></select>
+                <div class="card">
+                    <div class="card-header-row">
+                        <h3>Mapping Table <span id="table-row-count" class="count-badge"></span></h3>
+                        <div class="btn-group">
+                            <button id="export-csv-btn" class="btn-secondary">Export CSV</button>
+                            <button id="export-xlsx-btn" class="btn-secondary">Export Excel</button>
+                        </div>
                     </div>
-                    <div class="field">
-                        <label for="version-transition">Version Transition</label>
-                        <select id="version-transition"><option value="">Select framework first</option></select>
+                    <div class="table-toolbar">
+                        <div class="search-field table-search">
+                            <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+                            <input type="text" id="table-search-input" placeholder="Filter by control ID or title">
+                        </div>
+                        <div class="filter-chips" id="table-filter-chips">
+                            <button class="chip active" data-filter="all">All</button>
+                            <button class="chip" data-filter="mapped">Mapped</button>
+                            <button class="chip" data-filter="gap">Gaps</button>
+                            <button class="chip" data-filter="strong">Strong</button>
+                            <button class="chip" data-filter="partial">Partial</button>
+                            <button class="chip" data-filter="weak">Weak</button>
+                        </div>
                     </div>
-                    <button id="version-btn" class="btn-primary">Show Changes</button>
-                </div>
-
-                <div id="version-results" class="hidden">
-                    <div class="stats-grid">
-                        <div class="stat-card accent-green"><div class="stat-value" id="stat-added">0</div><div class="stat-label">Added</div></div>
-                        <div class="stat-card accent-blue"><div class="stat-value" id="stat-modified">0</div><div class="stat-label">Modified</div></div>
-                        <div class="stat-card accent-amber"><div class="stat-value" id="stat-renamed">0</div><div class="stat-label">Renamed</div></div>
-                        <div class="stat-card accent-red"><div class="stat-value" id="stat-removed">0</div><div class="stat-label">Removed</div></div>
-                    </div>
-                    <div id="version-changes-list" class="changes-list"></div>
-                </div>
-
-                <div id="version-empty" class="empty-state">
-                    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="4" width="32" height="40" rx="2"/><path d="M16 14h16M16 22h10M16 30h14" stroke-linecap="round"/></svg>
-                    <p>No version change data available yet.<br>Upload BSI Kompendium change documents or add changes via the API.</p>
+                    <div id="mapping-table-container" class="table-wrap"></div>
                 </div>
             </section>
 
-            <!-- Upload -->
+            <!-- Import official mapping document -->
             <section id="upload" class="tab-panel" role="tabpanel" aria-labelledby="tab-upload">
                 <div class="panel-header">
-                    <h2>Upload Documents</h2>
-                    <p>Upload compliance mapping documents to add new controls and mappings to the database.</p>
+                    <h2>Import</h2>
+                    <p>Add controls and mappings from an official document. Use this to load BSI IT-Grundschutz modules, C5 criteria, or any CSV/Excel mapping table into the database — then run AI Mapping or Coverage Analysis on them.</p>
                 </div>
 
                 <div class="upload-layout">
                     <div class="card upload-config">
-                        <h3>1. Configure Mapping</h3>
+                        <h3>1. Configure</h3>
                         <div class="upload-form-grid">
                             <div class="field">
                                 <label for="upload-source-fw">Source Framework</label>
                                 <select id="upload-source-fw"></select>
-                                <small class="field-hint">Controls in the "source" column (e.g. ISO 27001)</small>
                             </div>
                             <div class="field">
                                 <label for="upload-target-fw">Target Framework</label>
                                 <select id="upload-target-fw"></select>
-                                <small class="field-hint">Controls being mapped to (e.g. BSI, C5)</small>
                             </div>
                             <div class="field">
                                 <label for="doc-year">Document Year</label>
                                 <input type="text" id="doc-year" placeholder="e.g. 2022" maxlength="10">
-                                <small class="field-hint">Year or version of the mapping document</small>
                             </div>
                             <div class="field">
                                 <label for="doc-type">Document Format</label>
                                 <select id="doc-type">
-                                    <option value="BSI Zuordnungstabelle">BSI Zuordnungstabelle (PDF)</option>
-                                    <option value="C5 Cross-Reference">C5 Cross-Reference Table (Excel)</option>
-                                    <option value="Custom">Generic / Custom (CSV or Excel)</option>
+                                    <option value="BSI Zuordnungstabelle">BSI Zuordnungstabelle (ISO 27001 ↔ BSI mapping PDF)</option>
+                                    <option value="C5 PDF">BSI C5:2020 criteria PDF</option>
+                                    <option value="BSI IT-Grundschutz Module">BSI IT-Grundschutz module PDF (e.g. APP.1.1)</option>
+                                    <option value="C5 Cross-Reference">C5 cross-reference Excel</option>
+                                    <option value="CSV Mapping">Generic CSV (source/target columns)</option>
                                 </select>
-                                <small class="field-hint">Determines how the file is parsed</small>
                             </div>
                         </div>
+
+                        <!-- Inline framework creation — shown when user clicks "Create new" -->
+                        <div id="inline-fw-create" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+                            <p class="card-description" style="margin-bottom:10px;">Framework not in the list? Create it here — it'll appear in the dropdowns immediately.</p>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label for="new-fw-name">Full Name</label>
+                                    <input type="text" id="new-fw-name" placeholder="e.g. NIST Cybersecurity Framework">
+                                </div>
+                                <div class="field">
+                                    <label for="new-fw-short">Short Name</label>
+                                    <input type="text" id="new-fw-short" placeholder="e.g. NIST-CSF" maxlength="20">
+                                </div>
+                                <div class="field">
+                                    <label for="new-fw-version">Version</label>
+                                    <input type="text" id="new-fw-version" placeholder="e.g. 2.0" maxlength="20">
+                                </div>
+                            </div>
+                            <button id="create-fw-btn" class="btn-secondary">Create Framework</button>
+                            <div id="create-fw-status" class="status hidden" aria-live="polite"></div>
+                        </div>
+                        <button id="toggle-fw-create-btn" class="btn-link" style="margin-top:12px;font-size:12px;">+ Framework not in the list?</button>
                     </div>
 
                     <div class="card upload-file-card">
@@ -268,7 +312,7 @@
 
                 <div id="parse-results" class="parse-results hidden">
                     <div class="card">
-                        <h3>3. Review & Import</h3>
+                        <h3>3. Review &amp; Import</h3>
                         <div id="upload-summary" class="upload-summary"></div>
                         <div class="two-col">
                             <div>
@@ -280,120 +324,144 @@
                                 <div id="mappings-table" class="table-wrap"></div>
                             </div>
                         </div>
-                        <button id="import-btn" class="btn-primary">Import to Database</button>
+                        <div style="display:flex;gap:12px;align-items:center;margin-top:16px;">
+                            <button id="import-btn" class="btn-primary">Import to Database</button>
+                            <div id="import-status" class="status hidden" aria-live="polite"></div>
+                        </div>
                     </div>
                 </div>
-                <div id="import-status" class="status hidden" aria-live="polite"></div>
+
+                <!-- Post-import next steps -->
+                <div id="import-next-steps" class="card" style="display:none;">
+                    <h3>Import complete — what next?</h3>
+                    <div class="gap-action-btns" style="margin-top:12px;">
+                        <button class="btn-primary wf-link" data-tab="ai-mapping">Generate AI Mappings →</button>
+                        <button class="btn-secondary wf-link" data-tab="coverage">Analyze Coverage →</button>
+                    </div>
+                </div>
             </section>
 
-            <!-- Compliance Checking -->
-            <section id="compliance" class="tab-panel" role="tabpanel" aria-labelledby="tab-compliance">
+            <!-- AI Mapping (generate mappings from raw regulation text) -->
+            <section id="ai-mapping" class="tab-panel" role="tabpanel" aria-labelledby="tab-ai-mapping">
                 <div class="panel-header">
-                    <h2>Compliance Analysis</h2>
-                    <p>Upload regulations, extract structured tuples, and check business processes for compliance.</p>
-                    <div class="ai-engine-banner" id="compliance-engine-banner">
-                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 11H9v-2h2v2zm0-4H9V5h2v4z"/></svg>
-                        <span id="compliance-engine-text">Loading AI engine status...</span>
+                    <h2>AI Mapping</h2>
+                    <p>Let the AI propose mappings between two frameworks or two regulation texts.</p>
+                </div>
+
+                <!-- Path chooser -->
+                <div class="path-chooser" id="ai-path-chooser">
+                    <button class="path-choice active" id="path-fw-btn" data-path="fw">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="22" height="22"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z"/></svg>
+                        <strong>Map existing frameworks</strong>
+                        <span>C5, ISO 27001, BSI, or anything already imported</span>
+                    </button>
+                    <button class="path-choice" id="path-text-btn" data-path="text">
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="22" height="22"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"/></svg>
+                        <strong>Map from raw text</strong>
+                        <span>New regulation not in DB yet — paste its text to extract obligations and map them</span>
+                    </button>
+                </div>
+
+                <!-- Path A: Framework-to-Framework (default shown) -->
+                <div id="path-fw-content">
+                    <div class="card">
+                        <h3>Generate Mappings Between Frameworks</h3>
+                        <p class="card-description">Compares every control pair using SBERT similarity. Top matches are saved as <code>ai_suggested</code> mappings you can review in the Mappings tab.</p>
+                        <div class="field-row">
+                            <div class="field">
+                                <label for="fw-map-source">Source Framework</label>
+                                <select id="fw-map-source"><option value="">-- Select --</option></select>
+                            </div>
+                            <div class="field">
+                                <label for="fw-map-target">Target Framework</label>
+                                <select id="fw-map-target"><option value="">-- Select --</option></select>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="fw-map-threshold">Similarity Threshold: <span id="fw-map-threshold-val">0.45</span></label>
+                            <input type="range" id="fw-map-threshold" min="0.2" max="0.9" step="0.05" value="0.45">
+                            <small class="field-hint">0.45 is a good start. Lower = more results, higher = better quality.</small>
+                        </div>
+                        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;">
+                            <button id="fw-map-btn" class="btn-primary">Generate Mappings</button>
+                            <span id="fw-map-timer" class="operation-timer" style="display:none;"></span>
+                        </div>
+                        <div id="fw-map-status" class="status hidden" aria-live="polite"></div>
+                    </div>
+
+                    <div class="card" id="fw-map-results-card" style="display:none;">
+                        <div class="card-header-row">
+                            <h3>Results</h3>
+                            <div id="fw-map-summary-chips" style="display:flex;gap:8px;"></div>
+                        </div>
+                        <p class="card-description">Saved. Go to <button class="wf-link" data-tab="mappings">Mappings</button> to review and accept/reject each one.</p>
+                        <div id="fw-map-preview" class="check-results"></div>
                     </div>
                 </div>
 
-                <div class="compliance-grid">
-                    <!-- Left column: Regulation Management -->
-                    <div class="compliance-col">
-                        <div class="card">
-                            <h3>Upload Regulation</h3>
-                            <div class="field">
-                                <label for="reg-name">Regulation Name</label>
-                                <input type="text" id="reg-name" placeholder="e.g. General Data Protection Regulation">
-                            </div>
-                            <div class="field-row">
+                <!-- Path B: Regulation text (hidden by default) -->
+                <div id="path-text-content" style="display:none;">
+                    <div class="compliance-grid">
+                        <div class="compliance-col">
+                            <div class="card">
+                                <h3>Save Regulation Text</h3>
                                 <div class="field">
-                                    <label for="reg-short">Short Name</label>
-                                    <input type="text" id="reg-short" placeholder="e.g. GDPR">
+                                    <label for="reg-name">Name</label>
+                                    <input type="text" id="reg-name" placeholder="e.g. General Data Protection Regulation">
+                                </div>
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="reg-short">Short Name</label>
+                                        <input type="text" id="reg-short" placeholder="e.g. GDPR">
+                                    </div>
+                                    <div class="field">
+                                        <label for="reg-jurisdiction">Jurisdiction</label>
+                                        <input type="text" id="reg-jurisdiction" placeholder="e.g. EU">
+                                    </div>
                                 </div>
                                 <div class="field">
-                                    <label for="reg-jurisdiction">Jurisdiction</label>
-                                    <input type="text" id="reg-jurisdiction" placeholder="e.g. EU">
+                                    <label for="reg-text">Regulation Text</label>
+                                    <textarea id="reg-text" rows="8" placeholder="Paste the full regulation or annex text here..."></textarea>
+                                    <div class="demo-examples">
+                                        <button type="button" class="demo-example-btn" id="demo-reg-gdpr">
+                                            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2.5a1 1 0 110 2 1 1 0 010-2zM6.5 7h2v5h-2z"/></svg>
+                                            Load GDPR Example
+                                        </button>
+                                    </div>
                                 </div>
+                                <button id="reg-upload-btn" class="btn-primary">Save Regulation</button>
+                                <div id="reg-upload-status" class="status hidden" aria-live="polite"></div>
                             </div>
-                            <div class="field">
-                                <label for="reg-text">Regulation Text</label>
-                                <textarea id="reg-text" rows="8" placeholder="Paste the regulatory text here..."></textarea>
-                            </div>
-                            <button id="reg-upload-btn" class="btn-primary">Upload &amp; Analyze</button>
-                            <div id="reg-upload-status" class="status hidden" aria-live="polite"></div>
-                        </div>
-
-                        <div class="card">
-                            <h3>Uploaded Regulations</h3>
-                            <div id="reg-list" class="reg-list">
-                                <p class="muted">No regulations uploaded yet.</p>
+                            <div class="card">
+                                <h3>Saved Regulations</h3>
+                                <div id="reg-list" class="reg-list"><p class="muted">None yet.</p></div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Right column: Compliance Check + Results -->
-                    <div class="compliance-col">
-                        <div class="card">
-                            <h3>Compliance Check</h3>
-                            <div class="field">
-                                <label for="check-regulation">Select Regulation</label>
-                                <select id="check-regulation">
-                                    <option value="">-- Upload a regulation first --</option>
-                                </select>
-                            </div>
-                            <div class="field">
-                                <label for="check-business-text">Business Process / Privacy Policy</label>
-                                <textarea id="check-business-text" rows="8" placeholder="Paste the business process text or privacy policy to check..."></textarea>
-                            </div>
-                            <button id="check-run-btn" class="btn-primary">Run Compliance Check</button>
-                            <div id="check-status" class="status hidden" aria-live="polite"></div>
-                        </div>
-
-                        <div class="card" id="check-results-card" style="display:none;">
-                            <h3>Results</h3>
-                            <div id="check-results" class="check-results"></div>
-                        </div>
-
-                        <div class="card" id="tuples-card" style="display:none;">
-                            <h3>Extracted Tuples</h3>
-                            <div id="tuples-list" class="tuples-list"></div>
-                        </div>
-
-                        <div class="card" id="graph-card" style="display:none;">
-                            <h3>Eventic Graph</h3>
-                            <div id="graph-viz" class="graph-viz"></div>
-                        </div>
-
-                        <div class="card">
-                            <h3>Auto-Generate Mappings</h3>
-                            <p class="card-description">Find semantic overlaps between two regulations and generate mapping suggestions.</p>
-                            <div class="field-row">
-                                <div class="field">
-                                    <label for="map-source-reg">Source Regulation</label>
-                                    <select id="map-source-reg">
-                                        <option value="">-- Select --</option>
-                                    </select>
+                        <div class="compliance-col">
+                            <div class="card">
+                                <h3>Generate Mappings from Text</h3>
+                                <p class="card-description">Extracts deontic propositions from both regulation texts, builds eventic graphs, then finds semantically matching obligations.</p>
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label for="map-source-reg">Source</label>
+                                        <select id="map-source-reg"><option value="">-- Save a regulation first --</option></select>
+                                    </div>
+                                    <div class="field">
+                                        <label for="map-target-reg">Target</label>
+                                        <select id="map-target-reg"><option value="">-- Save a regulation first --</option></select>
+                                    </div>
                                 </div>
                                 <div class="field">
-                                    <label for="map-target-reg">Target Regulation</label>
-                                    <select id="map-target-reg">
-                                        <option value="">-- Select --</option>
-                                    </select>
+                                    <label for="map-threshold">Threshold: <span id="map-threshold-val">0.40</span></label>
+                                    <input type="range" id="map-threshold" min="0.2" max="0.9" step="0.05" value="0.4">
                                 </div>
+                                <button id="map-generate-btn" class="btn-primary">Generate Mappings</button>
+                                <div id="map-status" class="status hidden" aria-live="polite"></div>
                             </div>
-                            <div class="field">
-                                <label for="map-threshold">Similarity Threshold: <span id="map-threshold-val">0.40</span></label>
-                                <input type="range" id="map-threshold" min="0.2" max="0.9" step="0.05" value="0.4">
-                                <small class="field-hint">Lower = more matches but less precise. Higher = fewer but higher quality matches.</small>
+                            <div class="card" id="map-results-card" style="display:none;">
+                                <h3>Suggestions</h3>
+                                <div id="map-results" class="check-results"></div>
                             </div>
-                            <button id="map-generate-btn" class="btn-primary">Generate Mappings</button>
-                            <div id="map-status" class="status hidden" aria-live="polite"></div>
-                        </div>
-
-                        <div class="card" id="map-results-card" style="display:none;">
-                            <h3>Mapping Suggestions</h3>
-                            <div id="map-results" class="check-results"></div>
                         </div>
                     </div>
                 </div>
@@ -454,6 +522,31 @@
                     <textarea id="mm-notes" rows="3" placeholder="Reviewer notes (optional)"></textarea>
                 </div>
 
+                <div class="field">
+                    <label for="mm-impl-status">Implementation Status</label>
+                    <select id="mm-impl-status">
+                        <option value="not_assessed">Not Assessed</option>
+                        <option value="implemented">Implemented</option>
+                        <option value="partial">Partially Implemented</option>
+                        <option value="not_implemented">Not Implemented</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label for="mm-owner">Owner</label>
+                    <input type="text" id="mm-owner" placeholder="e.g. IT Security Team">
+                </div>
+
+                <div class="field">
+                    <label for="mm-review-date">Last Review Date</label>
+                    <input type="date" id="mm-review-date">
+                </div>
+
+                <div class="field">
+                    <label for="mm-evidence">Evidence / Reference</label>
+                    <textarea id="mm-evidence" rows="2" placeholder="Link to policy document, Jira ticket, etc."></textarea>
+                </div>
+
                 <div id="mapping-modal-error" class="status error hidden" aria-live="assertive"></div>
             </div>
             <div class="modal-footer">
@@ -480,6 +573,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20"></script>
 </body>
 </html>

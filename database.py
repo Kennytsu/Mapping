@@ -76,6 +76,10 @@ class Mapping(Base):
     source_type = Column(String(50), default="official")
     source_document = Column(String(200), default="")
     notes = Column(Text, default="")
+    implementation_status = Column(String(20), default="not_assessed")  # not_assessed, implemented, partial, not_implemented
+    owner = Column(String(200), default="")
+    review_date = Column(String(20), default="")
+    evidence_notes = Column(Text, default="")
 
     source_control = relationship("Control", foreign_keys=[source_control_id])
     target_control = relationship("Control", foreign_keys=[target_control_id])

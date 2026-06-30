@@ -364,28 +364,33 @@ def _match_definitions(chunk: str, definitions: list[dict]) -> list[dict]:
 
 
 def _reason_with_llm(prompt: str, llm_client) -> dict:
-    """Use LLM for compliance reasoning (OpenAI, watsonx, or Bedrock)."""
+    """Use LLM for compliance reasoning. Dispatches via llm_providers registry."""
     try:
+        from llm_providers import get_reasoning_fn
+        reason_fn = get_reasoning_fn(llm_client)
+        if reason_fn:
+            return reason_fn(prompt, llm_client)
+
+        # Legacy dispatch for clients with old-style markers
         if hasattr(llm_client, "_watsonx_model"):
             return _reason_with_watsonx(prompt, llm_client)
-
         if hasattr(llm_client, "_bedrock_model"):
             return _reason_with_bedrock(prompt, llm_client)
 
+        # Fallback: OpenAI-compatible client
         response = llm_client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
         )
         content = response.choices[0].message.content
-
         return _parse_compliance_response(content)
     except Exception as e:
         return {"judgment": "undetermined", "explanation": f"LLM error: {str(e)}"}
 
 
 def _reason_with_watsonx(prompt: str, watsonx_client) -> dict:
-    """Use IBM watsonx.ai for compliance reasoning."""
+    """Legacy: Use IBM watsonx.ai. Prefer llm_providers registry instead."""
     try:
         from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
         from ibm_watsonx_ai.foundation_models.utils.enums import DecodingMethods
@@ -404,7 +409,7 @@ def _reason_with_watsonx(prompt: str, watsonx_client) -> dict:
 
 
 def _reason_with_bedrock(prompt: str, bedrock_client) -> dict:
-    """Use AWS Bedrock (Claude) for compliance reasoning."""
+    """Legacy: Use AWS Bedrock. Prefer llm_providers registry instead."""
     import json
 
     try:

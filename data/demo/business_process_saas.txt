@@ -1,0 +1,24 @@
+DEMO BUSINESS PROCESS DESCRIPTION — Cloud SaaS Platform
+
+Our company operates a cloud-based SaaS platform that processes customer data including names, email addresses, and usage analytics. Below is a description of our current data handling and security practices for compliance review.
+
+Data Collection and Storage:
+We collect user email addresses, names, and billing information during registration. Usage data including login timestamps and feature interactions are logged automatically for analytics purposes. All data is stored in AWS RDS (PostgreSQL) with encryption at rest using AES-256. Database backups are taken daily and retained for 30 days.
+
+Access Control:
+Access to production systems is restricted to senior engineers via VPN with multi-factor authentication. We use role-based access control (RBAC) with the principle of least privilege. All access to customer data is logged and reviewed monthly by the security team. Privileged access requires approval through our change management system.
+
+Data Processing:
+Customer data is processed solely for providing the contracted service. We do not share personal data with third parties for marketing purposes. Data is processed within the EU (Frankfurt region). We share anonymized, aggregated usage statistics with our analytics partner without obtaining explicit user consent.
+
+Security Measures:
+We conduct quarterly vulnerability assessments and annual penetration testing. Security patches are applied within 14 days of release for critical vulnerabilities. We use a web application firewall (WAF) and DDoS protection. Network traffic is encrypted in transit using TLS 1.2 or higher.
+
+Incident Response:
+We maintain an incident response plan that is reviewed annually. Security incidents are logged and categorized by severity. Major incidents affecting customer data are reported to the DPO within 24 hours. We have not yet defined a formal process for notifying affected data subjects in the event of a breach.
+
+Employee Practices:
+All employees receive annual security awareness training. New employees receive security onboarding within their first week. Remote work is permitted with VPN access. We have a clean desk policy for employees handling sensitive documents. Employee access is revoked within 24 hours of termination.
+
+Third-Party Services:
+We use Stripe for payment processing and AWS for infrastructure. Data processing agreements are in place with all sub-processors. We have not performed a recent security audit of our cloud provider's controls.

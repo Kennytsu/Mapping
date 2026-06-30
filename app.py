@@ -15,7 +15,7 @@ from database import (
     init_db, get_session,
     Framework, Control, Mapping, VersionChange,
 )
-from document_parser import parse_uploaded_bytes
+from document_parser import parse_uploaded_bytes, list_parsers
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +52,10 @@ class MappingOut(BaseModel):
     source_type: str
     source_document: str
     notes: str = ""
+    implementation_status: str = "not_assessed"
+    owner: str = ""
+    review_date: str = ""
+    evidence_notes: str = ""
 
 class MappingDetail(BaseModel):
     source: ControlOut
@@ -72,6 +76,10 @@ class MappingUpdate(BaseModel):
     source_type: Optional[str] = None
     notes: Optional[str] = None
     source_document: Optional[str] = None
+    implementation_status: Optional[str] = None
+    owner: Optional[str] = None
+    review_date: Optional[str] = None
+    evidence_notes: Optional[str] = None
 
 
 class ControlSearchOut(BaseModel):
@@ -145,116 +153,63 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 
 import os
-
-def _get_llm_client():
-    """Create an LLM client based on LLM_PROVIDER env var."""
-    provider = os.getenv("LLM_PROVIDER", "rule_based").lower()
-
-    if provider == "openai":
-        try:
-            import openai
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                return None
-            return openai.OpenAI(api_key=api_key)
-        except ImportError:
-            return None
-
-    elif provider == "watsonx":
-        try:
-            from ibm_watsonx_ai import Credentials
-            from ibm_watsonx_ai.foundation_models import ModelInference
-
-            api_key = os.getenv("WATSONX_API_KEY")
-            url = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
-            project_id = os.getenv("WATSONX_PROJECT_ID")
-            model_id = os.getenv("WATSONX_MODEL", "ibm/granite-3-8b-instruct")
-
-            if not api_key:
-                return None
-
-            credentials = Credentials(url=url, api_key=api_key)
-
-            model = ModelInference(
-                model_id=model_id,
-                credentials=credentials,
-                project_id=project_id or None,
-            )
-            model._watsonx_model = True
-            return model
-        except (ImportError, Exception):
-            return None
-
-    elif provider == "bedrock":
-        try:
-            import boto3
-
-            access_key = os.getenv("AWS_ACCESS_KEY_ID")
-            secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-            region = os.getenv("AWS_REGION", "us-east-1")
-            model_id = os.getenv("BEDROCK_MODEL", "anthropic.claude-sonnet-4-6")
-
-            if not access_key or not secret_key:
-                return None
-
-            client = boto3.client(
-                "bedrock-runtime",
-                region_name=region,
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-            )
-            client._bedrock_model = True
-            client._bedrock_model_id = model_id
-            return client
-        except (ImportError, Exception):
-            return None
-
-    return None
+from llm_providers import get_llm_client as _get_llm_client, get_provider_status
 
 
 @app.get("/api/llm-status")
 async def llm_status():
     """Return the current LLM provider configuration status."""
-    provider = os.getenv("LLM_PROVIDER", "rule_based").lower()
-    model = ""
-    status = "active"
-
-    if provider == "watsonx":
-        model = os.getenv("WATSONX_MODEL", "ibm/granite-3-8b-instruct")
-        has_key = bool(os.getenv("WATSONX_API_KEY"))
-        has_project = bool(os.getenv("WATSONX_PROJECT_ID"))
-        if not has_key:
-            status = "no_key"
-        elif not has_project:
-            status = "no_project"
-    elif provider == "bedrock":
-        model = os.getenv("BEDROCK_MODEL", "anthropic.claude-sonnet-4-6")
-        has_access = bool(os.getenv("AWS_ACCESS_KEY_ID"))
-        has_secret = bool(os.getenv("AWS_SECRET_ACCESS_KEY"))
-        if not has_access or not has_secret:
-            status = "no_key"
-    elif provider == "openai":
-        model = os.getenv("OPENAI_MODEL", "gpt-4")
-        if not os.getenv("OPENAI_API_KEY"):
-            status = "no_key"
-    elif provider == "ollama":
-        model = os.getenv("OLLAMA_MODEL", "llama3")
-    elif provider == "rule_based":
-        model = "heuristic"
-
-    return {
-        "provider": provider,
-        "model": model,
-        "status": status,
-    }
+    return get_provider_status()
 
 
 # ---------------------------------------------------------------------------
 # API routes
 # ---------------------------------------------------------------------------
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.get("/api/implementation-summary")
+async def implementation_summary(
+    framework_id: Optional[int] = None,
+    session: AsyncSession = Depends(get_session),
+):
+    """Return counts of implementation statuses."""
+    stmt = select(
+        Mapping.implementation_status,
+        func.count(Mapping.id),
+    )
+    if framework_id:
+        stmt = stmt.join(Control, Mapping.source_control_id == Control.id).where(
+            Control.framework_id == framework_id
+        )
+    stmt = stmt.group_by(Mapping.implementation_status)
+    rows = (await session.execute(stmt)).all()
+
+    summary = {"not_assessed": 0, "implemented": 0, "partial": 0, "not_implemented": 0}
+    total = 0
+    for status, count in rows:
+        key = status or "not_assessed"
+        summary[key] = count
+        total += count
+
+    return {
+        "total": total,
+        "summary": summary,
+        "percentage_implemented": round((summary["implemented"] / total * 100) if total else 0, 1),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Frameworks
+# ---------------------------------------------------------------------------
+
+
 @app.get("/api/frameworks", response_model=list[FrameworkOut])
 async def list_frameworks(session: AsyncSession = Depends(get_session)):
+    """List all frameworks with their control counts."""
     stmt = (
         select(
             Framework,
@@ -276,6 +231,51 @@ async def list_frameworks(session: AsyncSession = Depends(get_session)):
         )
         for fw, cnt in rows
     ]
+
+
+class FrameworkCreate(BaseModel):
+    name: str
+    short_name: str
+    version: str = ""
+    description: str = ""
+
+
+@app.post("/api/frameworks", response_model=FrameworkOut)
+async def create_framework(
+    body: FrameworkCreate,
+    session: AsyncSession = Depends(get_session),
+):
+    """Create a new empty framework. Controls can be imported afterwards via /api/import."""
+    existing = (await session.execute(
+        select(Framework).where(Framework.short_name == body.short_name)
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(400, f"Framework '{body.short_name}' already exists (id={existing.id}).")
+
+    fw = Framework(
+        name=body.name,
+        short_name=body.short_name,
+        version=body.version,
+        description=body.description,
+        is_active=True,
+    )
+    session.add(fw)
+    await session.commit()
+    await session.refresh(fw)
+    return FrameworkOut(
+        id=fw.id,
+        name=fw.name,
+        short_name=fw.short_name,
+        version=fw.version,
+        description=fw.description or "",
+        is_active=fw.is_active,
+        control_count=0,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Controls
+# ---------------------------------------------------------------------------
 
 
 @app.get("/api/controls", response_model=ControlSearchOut)
@@ -347,12 +347,18 @@ async def search_controls(
     return ControlSearchOut(total=total, limit=limit, offset=offset, items=items)
 
 
+# ---------------------------------------------------------------------------
+# Mappings — lookup by control
+# ---------------------------------------------------------------------------
+
+
 @app.get("/api/mappings/{control_id}", response_model=MappingDetail)
 async def get_mappings(
     control_id: str,
     framework_id: Optional[int] = None,
     session: AsyncSession = Depends(get_session),
 ):
+    """Return a control and all its mappings. Optionally filter by framework."""
     stmt = select(Control).where(Control.control_id == control_id)
     if framework_id:
         stmt = stmt.where(Control.framework_id == framework_id)
@@ -384,6 +390,7 @@ async def get_mappings(
             Mapping.source_type,
             Mapping.source_document,
             Mapping.notes,
+            Mapping.implementation_status,
         )
         .join(
             Mapping,
@@ -410,11 +417,17 @@ async def get_mappings(
             source_type=st,
             source_document=sd or "",
             notes=notes or "",
+            implementation_status=impl_status or "not_assessed",
         )
-        for c, sn, mid, conf, st, sd, notes in rows
+        for c, sn, mid, conf, st, sd, notes, impl_status in rows
     ]
 
     return MappingDetail(source=source_out, mappings=mappings_out)
+
+
+# ---------------------------------------------------------------------------
+# Coverage Analysis
+# ---------------------------------------------------------------------------
 
 
 @app.get("/api/coverage", response_model=CoverageOut)
@@ -423,6 +436,7 @@ async def coverage_analysis(
     target: int = Query(..., description="Target framework ID"),
     session: AsyncSession = Depends(get_session),
 ):
+    """Coverage statistics between two frameworks: mapped count, gap count, percentage."""
     src_fw = (await session.execute(
         select(Framework).where(Framework.id == source)
     )).scalar_one_or_none()
@@ -606,7 +620,7 @@ async def coverage_table(
     rows = []
     for sc in src_controls:
         mapped = (await session.execute(
-            select(Control, Mapping.id, Mapping.confidence, Mapping.source_type, Mapping.notes)
+            select(Control, Mapping.id, Mapping.confidence, Mapping.source_type, Mapping.notes, Mapping.implementation_status)
             .join(
                 Mapping,
                 or_(
@@ -618,7 +632,7 @@ async def coverage_table(
         )).all()
 
         if mapped:
-            for tc, mid, conf, st, notes in mapped:
+            for tc, mid, conf, st, notes, impl_status in mapped:
                 rows.append({
                     "mapping_id": mid,
                     "source_id": sc.control_id,
@@ -628,6 +642,7 @@ async def coverage_table(
                     "confidence": conf,
                     "source_type": st,
                     "notes": notes or "",
+                    "implementation_status": impl_status or "not_assessed",
                 })
         else:
             rows.append({
@@ -639,6 +654,7 @@ async def coverage_table(
                 "confidence": 0,
                 "source_type": "gap",
                 "notes": "",
+                "implementation_status": "not_assessed",
             })
 
     return {
@@ -808,15 +824,27 @@ async def coverage_export(
     )
 
 
+# ---------------------------------------------------------------------------
+# Document Import
+# ---------------------------------------------------------------------------
+
+
 @app.post("/api/upload", response_model=ParseResult)
 async def upload_document(
     file: UploadFile = File(...),
     doc_type: str = Form("BSI Zuordnungstabelle"),
 ):
+    """Parse an uploaded document and return extracted controls/mappings for review."""
     content = await file.read()
     filename = file.filename or ""
     result = parse_uploaded_bytes(content, filename, doc_type)
     return ParseResult(**result)
+
+
+@app.get("/api/parsers")
+async def available_parsers():
+    """List registered document parsers (so the UI can populate format dropdowns)."""
+    return list_parsers()
 
 
 @app.post("/api/import", response_model=ImportResult)
@@ -824,6 +852,7 @@ async def import_data(
     body: ImportRequest,
     session: AsyncSession = Depends(get_session),
 ):
+    """Persist parsed controls and mappings from a document upload into the database."""
     controls_added = 0
     mappings_added = 0
 
@@ -936,6 +965,10 @@ class MappingDetailOut(BaseModel):
     source_type: str
     source_document: str
     notes: str
+    implementation_status: str = "not_assessed"
+    owner: str = ""
+    review_date: str = ""
+    evidence_notes: str = ""
 
 
 def _serialize_mapping(m: Mapping) -> MappingDetailOut:
@@ -947,6 +980,10 @@ def _serialize_mapping(m: Mapping) -> MappingDetailOut:
         source_type=m.source_type or "manual",
         source_document=m.source_document or "",
         notes=m.notes or "",
+        implementation_status=m.implementation_status or "not_assessed",
+        owner=m.owner or "",
+        review_date=m.review_date or "",
+        evidence_notes=m.evidence_notes or "",
     )
 
 
@@ -1022,6 +1059,14 @@ async def update_mapping(
         mapping.notes = body.notes
     if body.source_document is not None:
         mapping.source_document = body.source_document
+    if body.implementation_status is not None:
+        mapping.implementation_status = body.implementation_status
+    if body.owner is not None:
+        mapping.owner = body.owner
+    if body.review_date is not None:
+        mapping.review_date = body.review_date
+    if body.evidence_notes is not None:
+        mapping.evidence_notes = body.evidence_notes
 
     await session.commit()
     await session.refresh(mapping)
@@ -1376,6 +1421,148 @@ class GenerateMappingsRequest(BaseModel):
     threshold: float = 0.4
 
 
+class FrameworkMappingRequest(BaseModel):
+    source_framework_id: int
+    target_framework_id: int
+    threshold: float = 0.45
+    top_k: int = 3
+
+
+@app.post("/api/frameworks/generate-mappings")
+async def generate_framework_mappings(
+    body: FrameworkMappingRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """AI-assisted mapping between two frameworks already in the database.
+
+    Takes every source control, represents it as text (ID + title + description),
+    and uses SBERT similarity to find the best-matching target controls above the
+    threshold. Results are stored as ai_suggested mappings — identical to what
+    the text-based Generate Mappings produces, but works directly from DB controls
+    so you don't need to paste thousands of lines of text.
+    """
+    import asyncio
+
+    src_controls = (await session.execute(
+        select(Control).where(Control.framework_id == body.source_framework_id)
+    )).scalars().all()
+
+    tgt_controls = (await session.execute(
+        select(Control).where(Control.framework_id == body.target_framework_id)
+    )).scalars().all()
+
+    if not src_controls or not tgt_controls:
+        raise HTTPException(400, "One or both frameworks have no controls in the database.")
+
+    src_fw = (await session.execute(
+        select(Framework).where(Framework.id == body.source_framework_id)
+    )).scalar_one_or_none()
+    tgt_fw = (await session.execute(
+        select(Framework).where(Framework.id == body.target_framework_id)
+    )).scalar_one_or_none()
+
+    def _build_text(ctrl) -> str:
+        parts = [ctrl.control_id, ctrl.title or ""]
+        if ctrl.description:
+            parts.append(ctrl.description[:300])
+        return ": ".join(p for p in parts if p)
+
+    def _run_similarity():
+        from arc_pipeline import phrase_similarity
+        try:
+            from sentence_transformers import SentenceTransformer
+            import numpy as np
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            src_texts = [_build_text(c) for c in src_controls]
+            tgt_texts = [_build_text(c) for c in tgt_controls]
+            src_embs = model.encode(src_texts, convert_to_numpy=True, show_progress_bar=False)
+            tgt_embs = model.encode(tgt_texts, convert_to_numpy=True, show_progress_bar=False)
+            # Cosine similarity matrix
+            src_norm = src_embs / (np.linalg.norm(src_embs, axis=1, keepdims=True) + 1e-10)
+            tgt_norm = tgt_embs / (np.linalg.norm(tgt_embs, axis=1, keepdims=True) + 1e-10)
+            sim_matrix = src_norm @ tgt_norm.T  # (n_src, n_tgt)
+            pairs = []
+            for i, src_ctrl in enumerate(src_controls):
+                row = sim_matrix[i]
+                top_indices = np.argsort(row)[::-1][:body.top_k]
+                for j in top_indices:
+                    score = float(row[j])
+                    if score >= body.threshold:
+                        pairs.append((src_ctrl, tgt_controls[j], score))
+            return pairs
+        except Exception:
+            # Fallback: phrase_similarity from arc_pipeline
+            pairs = []
+            for src_ctrl in src_controls:
+                src_text = _build_text(src_ctrl)
+                scores = []
+                for tgt_ctrl in tgt_controls:
+                    tgt_text = _build_text(tgt_ctrl)
+                    score = phrase_similarity(src_text, tgt_text)
+                    if score >= body.threshold:
+                        scores.append((tgt_ctrl, score))
+                scores.sort(key=lambda x: x[1], reverse=True)
+                for tgt_ctrl, score in scores[:body.top_k]:
+                    pairs.append((src_ctrl, tgt_ctrl, score))
+            return pairs
+
+    pairs = await asyncio.to_thread(_run_similarity)
+
+    # Persist as ai_suggested mappings (skip if already exists)
+    existing = set()
+    if pairs:
+        src_ids = {c.id for c in src_controls}
+        tgt_ids = {c.id for c in tgt_controls}
+        rows = (await session.execute(
+            select(Mapping.source_control_id, Mapping.target_control_id).where(
+                Mapping.source_control_id.in_(src_ids),
+                Mapping.target_control_id.in_(tgt_ids),
+            )
+        )).all()
+        existing = {(s, t) for s, t in rows}
+
+    added = 0
+    for src_ctrl, tgt_ctrl, score in pairs:
+        key = (src_ctrl.id, tgt_ctrl.id)
+        if key in existing:
+            continue
+        session.add(Mapping(
+            source_control_id=src_ctrl.id,
+            target_control_id=tgt_ctrl.id,
+            source_type="ai_suggested",
+            confidence=round(score, 3),
+            source_document=f"AI: {src_fw.short_name if src_fw else '?'} → {tgt_fw.short_name if tgt_fw else '?'}",
+            notes=f"Auto-generated by SBERT similarity (score: {score:.2f})",
+        ))
+        existing.add(key)
+        added += 1
+
+    await session.commit()
+
+    src_name = src_fw.short_name if src_fw else str(body.source_framework_id)
+    tgt_name = tgt_fw.short_name if tgt_fw else str(body.target_framework_id)
+
+    return {
+        "source_framework": src_name,
+        "target_framework": tgt_name,
+        "source_controls_checked": len(src_controls),
+        "target_controls_checked": len(tgt_controls),
+        "mappings_added": added,
+        "mappings_skipped": len(pairs) - added,
+        "threshold": body.threshold,
+        "preview": [
+            {
+                "source": p[0].control_id,
+                "source_title": p[0].title or "",
+                "target": p[1].control_id,
+                "target_title": p[1].title or "",
+                "confidence": round(p[2], 3),
+            }
+            for p in sorted(pairs, key=lambda x: x[2], reverse=True)[:20]
+        ],
+    }
+
+
 @app.post("/api/regulations/generate-mappings")
 async def generate_regulation_mappings(
     body: GenerateMappingsRequest,
@@ -1482,7 +1669,7 @@ async def generate_regulation_mappings(
 
 
 # ---------------------------------------------------------------------------
-# AI module skeleton endpoints
+# Embedding & Suggestion Endpoints (scaffolding — AI module extension point)
 # ---------------------------------------------------------------------------
 
 class EmbeddingRequest(BaseModel):
@@ -1558,6 +1745,233 @@ async def suggest_mappings(
         "target_framework_id": framework_id,
         "suggestions": suggestions,
         "message": "" if suggestions else "No embeddings available. Run embedding generation first.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Policy Gap Check
+# ---------------------------------------------------------------------------
+
+class PolicyCheckRequest(BaseModel):
+    source_framework_id: int
+    target_framework_id: int
+    policy_text: str
+    threshold: float = 0.45
+
+
+@app.post("/api/coverage/check-policy")
+async def check_policy_against_gaps(
+    body: PolicyCheckRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Check how well a policy document covers the unmapped controls.
+
+    Uses the full ARC pipeline (Algorithm 1 + eventic graph):
+    1. Synthesizes each unmapped control into a deontic "shall" clause.
+    2. Runs extract_deontic_propositions + build_eventic_graph over them.
+    3. Chunks the policy text and matches each chunk against the graph
+       using SBERT + the compliance reasoning layer (LLM if available,
+       rule-based otherwise).
+    4. Aggregates per-control: covered / possibly_covered / not_covered.
+    """
+    import asyncio
+
+    src_controls = (await session.execute(
+        select(Control).where(Control.framework_id == body.source_framework_id)
+    )).scalars().all()
+
+    tgt_control_ids = set((await session.execute(
+        select(Control.id).where(Control.framework_id == body.target_framework_id)
+    )).scalars().all())
+
+    src_id_set = {c.id for c in src_controls}
+    mapped_src: set[int] = set()
+
+    if src_id_set and tgt_control_ids:
+        pairs = (await session.execute(
+            select(Mapping.source_control_id, Mapping.target_control_id).where(
+                or_(
+                    and_(
+                        Mapping.source_control_id.in_(src_id_set),
+                        Mapping.target_control_id.in_(tgt_control_ids),
+                    ),
+                    and_(
+                        Mapping.target_control_id.in_(src_id_set),
+                        Mapping.source_control_id.in_(tgt_control_ids),
+                    ),
+                )
+            )
+        )).all()
+        for s, t in pairs:
+            if s in src_id_set:
+                mapped_src.add(s)
+            else:
+                mapped_src.add(t)
+
+    unmapped = [c for c in src_controls if c.id not in mapped_src]
+
+    if not unmapped or not body.policy_text.strip():
+        return {
+            "unmapped_count": len(unmapped),
+            "checked_count": 0,
+            "covered_count": 0,
+            "possibly_covered_count": 0,
+            "not_covered_count": 0,
+            "results": [],
+            "message": "No unmapped controls or no policy text provided.",
+        }
+
+    def _run_matching():
+        """Run the ARC pipeline against the policy text.
+
+        Each unmapped control is synthesized into a regulation clause so that
+        extract_deontic_propositions can parse it into obligations.  All control
+        clauses are combined into one eventic graph; the policy text is chunked
+        and each chunk is matched against the graph.  We then aggregate per-
+        control: a control is "covered" when at least one policy chunk produced
+        a compliant or undetermined judgment for one of its obligations.
+        """
+        from dynamic_layer import extract_deontic_propositions, build_eventic_graph, chunk_text
+        from static_layer import extract_term_definitions
+        from compliance_checker import match_chunk_to_graph, fuse_knowledge, _reason_rule_based
+        from llm_providers import get_llm_client, get_reasoning_fn
+        from compliance_checker import build_compliance_prompt, _reason_with_llm
+
+        # ── Step 1: synthesize each control into a "shall" clause ──────────
+        # Maps action_node_text → control so we can trace matches back.
+        clause_to_ctrl: dict[str, object] = {}
+
+        def _synthesize(ctrl) -> str:
+            title = ctrl.title or ctrl.control_id
+            desc = ctrl.description or ""
+            # Short description: use it directly as the obligation body
+            body_text = desc[:300] if desc else f"implement {title.lower()}"
+            clause = f"The organization shall {body_text}" if not any(
+                w in body_text.lower() for w in ("shall", "must", "should")
+            ) else body_text
+            return clause
+
+        all_clauses = ""
+        ctrl_clauses: dict[int, str] = {}  # ctrl.id → clause text
+        for ctrl in unmapped[:60]:
+            clause = _synthesize(ctrl)
+            ctrl_clauses[ctrl.id] = clause
+            all_clauses += clause + "\n"
+
+        if not all_clauses.strip():
+            return []
+
+        # ── Step 2: build eventic graph from synthesized regulation text ───
+        propositions = extract_deontic_propositions(all_clauses)
+        graph = build_eventic_graph(propositions)
+        definitions = extract_term_definitions(all_clauses)
+
+        # ── Step 3: chunk the policy document ─────────────────────────────
+        policy_chunks = [c for c in chunk_text(body.policy_text) if len(c.strip()) > 20]
+        if not policy_chunks:
+            return []
+
+        # ── Step 4: match every policy chunk against the graph ─────────────
+        # Collect all matched obligations per chunk so we can trace which
+        # control's obligation was satisfied.
+        llm_client = None
+        try:
+            llm_client = get_llm_client()
+        except Exception:
+            pass
+
+        chunk_results = []
+        for chunk in policy_chunks:
+            matches = match_chunk_to_graph(chunk, graph, threshold=0.2)
+            static_knowledge = [
+                d for d in definitions
+                if any(d.get("term", "").lower() in chunk.lower().split())
+            ]
+            knowledge = fuse_knowledge(static_knowledge, matches)
+
+            if llm_client and get_reasoning_fn(llm_client):
+                prompt = build_compliance_prompt(chunk, knowledge)
+                verdict = _reason_with_llm(prompt, llm_client)
+            else:
+                verdict = _reason_rule_based(chunk, knowledge, matches)
+
+            chunk_results.append({
+                "chunk": chunk,
+                "judgment": verdict["judgment"],
+                "explanation": verdict["explanation"],
+                "matched_obligations": [m["text"] for m in matches if m.get("relation") == "duty"],
+                "top_match_score": max((m["score"] for m in matches), default=0.0),
+            })
+
+        # ── Step 5: aggregate per control ─────────────────────────────────
+        results = []
+        for ctrl in unmapped[:60]:
+            clause = ctrl_clauses[ctrl.id]
+            clause_lower = clause.lower()
+
+            # Find policy chunks whose matched obligations overlap with this
+            # control's synthesized clause.
+            best_judgment = "not_covered"
+            best_score = 0.0
+            best_chunk = ""
+            best_explanation = ""
+
+            for cr in chunk_results:
+                for obligation in cr["matched_obligations"]:
+                    # Check if this obligation text appears in or is close to
+                    # this control's clause (word overlap as a lightweight check)
+                    obl_words = set(obligation.lower().split())
+                    clause_words = set(clause_lower.split())
+                    overlap_ratio = len(obl_words & clause_words) / max(len(obl_words), 1)
+
+                    if overlap_ratio < 0.15:
+                        continue
+
+                    score = cr["top_match_score"]
+                    judgment = cr["judgment"]
+
+                    # Promote coverage verdict
+                    if judgment == "compliant" and best_judgment != "covered":
+                        best_judgment = "covered"
+                        best_score = score
+                        best_chunk = cr["chunk"]
+                        best_explanation = cr["explanation"]
+                    elif judgment == "undetermined" and best_judgment == "not_covered":
+                        best_judgment = "possibly_covered"
+                        best_score = score
+                        best_chunk = cr["chunk"]
+                        best_explanation = cr["explanation"]
+                    elif score > best_score:
+                        best_score = score
+                        best_chunk = cr["chunk"]
+                        best_explanation = cr["explanation"]
+
+            results.append({
+                "control_id": ctrl.control_id,
+                "title": ctrl.title or "",
+                "coverage": best_judgment,
+                "confidence": round(best_score, 3),
+                "matching_snippet": best_chunk[:250] if best_judgment != "not_covered" else "",
+                "explanation": best_explanation,
+            })
+
+        return sorted(results, key=lambda x: x["confidence"], reverse=True)
+
+    results = await asyncio.to_thread(_run_matching)
+    if results is None:
+        results = []
+
+    covered = sum(1 for r in results if r["coverage"] == "covered")
+    possibly = sum(1 for r in results if r["coverage"] == "possibly_covered")
+    not_covered = sum(1 for r in results if r["coverage"] == "not_covered")
+
+    return {
+        "unmapped_count": len(unmapped),
+        "checked_count": len(results),
+        "covered_count": covered,
+        "possibly_covered_count": possibly,
+        "not_covered_count": not_covered,
+        "results": results,
     }
 
 

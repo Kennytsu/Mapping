@@ -1,0 +1,19 @@
+REGULATION (EU) 2016/679 — GDPR Article 32: Security of Processing
+
+Taking into account the state of the art, the costs of implementation and the nature, scope, context and purposes of processing as well as the risk of varying likelihood and severity for the rights and freedoms of natural persons, the controller and the processor shall implement appropriate technical and organisational measures to ensure a level of security appropriate to the risk.
+
+Those measures shall include, as appropriate:
+(a) the pseudonymisation and encryption of personal data;
+(b) the ability to ensure the ongoing confidentiality, integrity, availability and resilience of processing systems and services;
+(c) the ability to restore the availability and access to personal data in a timely manner in the event of a physical or technical incident;
+(d) a process for regularly testing, assessing and evaluating the effectiveness of technical and organisational measures for ensuring the security of the processing.
+
+In assessing the appropriate level of security, account shall in particular be taken of the risks that are presented by processing, in particular from accidental or unlawful destruction, loss, alteration, unauthorised disclosure of, or access to personal data transmitted, stored or otherwise processed.
+
+The controller and processor shall take steps to ensure that any natural person acting under the authority of the controller or the processor who has access to personal data does not process them except on instructions from the controller, unless required to do so by Union or Member State law.
+
+The controller must maintain a record of all processing activities under its responsibility. This record shall contain all of the following information: the name and contact details of the controller, the purposes of the processing, a description of the categories of data subjects, a description of the categories of personal data, the categories of recipients to whom the personal data have been or will be disclosed.
+
+Personal data shall be collected for specified, explicit and legitimate purposes and not further processed in a manner that is incompatible with those purposes. Personal data shall be adequate, relevant and limited to what is necessary in relation to the purposes for which they are processed.
+
+The controller shall implement appropriate technical and organisational measures to ensure that, by default, only personal data which are necessary for each specific purpose of the processing are processed. That obligation applies to the amount of personal data collected, the extent of their processing, the period of their storage and their accessibility.
