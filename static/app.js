@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initMappingModal();
     initConfirmModal();
     initFrameworkMapping();
+    initFileUploads();
     loadFrameworks();
     loadLLMStatus();
     document.getElementById('search-input').focus();
@@ -245,7 +246,7 @@ function activateTab(tab) {
 
     // Tab-specific actions on activation
     const tabId = tab.dataset.tab;
-    if (tabId === 'mappings' && _lastCoverageTable) renderMappingTable(_lastCoverageTable);
+    void tabId; // no per-tab side effects needed
 }
 
 function switchTab(tabId) {
@@ -943,6 +944,81 @@ function initCoverage() {
     });
 
     document.getElementById('policy-check-btn').addEventListener('click', runPolicyCheck);
+
+    // Inline AI mapping (no tab switch needed)
+    const inlineBtn = document.getElementById('inline-ai-map-btn');
+    const inlineThreshold = document.getElementById('inline-threshold');
+    const inlineThresholdVal = document.getElementById('inline-threshold-val');
+    if (inlineThreshold) {
+        inlineThreshold.addEventListener('input', () => {
+            inlineThresholdVal.textContent = parseFloat(inlineThreshold.value).toFixed(2);
+        });
+    }
+    if (inlineBtn) inlineBtn.addEventListener('click', runInlineAiMapping);
+}
+
+// ---------------------------------------------------------------------------
+// Inline AI Mapping (from Coverage tab — no tab switch needed)
+// ---------------------------------------------------------------------------
+
+let _inlineMapTimer = null;
+
+async function runInlineAiMapping() {
+    const srcId = document.getElementById('source-fw').value;
+    const tgtId = document.getElementById('target-fw').value;
+    const threshold = parseFloat(document.getElementById('inline-threshold').value);
+    const btn = document.getElementById('inline-ai-map-btn');
+    const statusEl = document.getElementById('inline-ai-map-status');
+    const timerEl = document.getElementById('inline-ai-map-timer');
+
+    if (!srcId || !tgtId || srcId === tgtId) {
+        statusEl.textContent = 'Run a coverage analysis first to set source and target frameworks.';
+        statusEl.className = 'status error';
+        statusEl.classList.remove('hidden');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+    statusEl.classList.add('hidden');
+    timerEl.style.display = 'inline';
+    let secs = 0;
+    timerEl.textContent = 'Running… 0s';
+    _inlineMapTimer = setInterval(() => { secs++; timerEl.textContent = `Running… ${secs}s`; }, 1000);
+
+    try {
+        const resp = await fetch('/api/frameworks/generate-mappings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source_framework_id: parseInt(srcId),
+                target_framework_id: parseInt(tgtId),
+                threshold,
+                top_k: 3,
+            }),
+        });
+        if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+        const data = await resp.json();
+        const count = data.mappings_created ?? data.created ?? 0;
+
+        statusEl.textContent = `Done — ${count} new mapping${count !== 1 ? 's' : ''} added. Re-running coverage…`;
+        statusEl.className = 'status success';
+        statusEl.classList.remove('hidden');
+
+        // Auto-refresh coverage so the user sees updated stats immediately
+        await runCoverage();
+
+        statusEl.textContent = `Done — ${count} new mapping${count !== 1 ? 's' : ''} added. Coverage updated.`;
+    } catch (err) {
+        statusEl.textContent = 'AI mapping failed: ' + err.message;
+        statusEl.className = 'status error';
+        statusEl.classList.remove('hidden');
+    } finally {
+        clearInterval(_inlineMapTimer);
+        timerEl.style.display = 'none';
+        btn.disabled = false;
+        btn.classList.remove('loading');
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1136,6 +1212,10 @@ async function runCoverage() {
 
         renderMappingTable(table);
 
+        // Show the mapping table card now that we have data
+        const mappingTableCard = document.getElementById('mapping-table-card');
+        if (mappingTableCard) mappingTableCard.style.display = '';
+
         document.querySelectorAll('.coverage-link').forEach(el => {
             el.addEventListener('click', () => switchToLookup(el.dataset.id));
         });
@@ -1154,6 +1234,14 @@ async function runCoverage() {
             if (gapCountBadge) gapCountBadge.textContent = coverage.unmapped_controls;
             if (policyGapCount) policyGapCount.textContent = `${coverage.unmapped_controls} unmapped controls`;
             if (gapDetails) gapDetails.open = false;
+
+            // Show framework names in the inline mapping widget
+            const srcSelect = document.getElementById('source-fw');
+            const tgtSelect = document.getElementById('target-fw');
+            const srcChip = document.getElementById('inline-src-name');
+            const tgtChip = document.getElementById('inline-tgt-name');
+            if (srcChip && srcSelect) srcChip.textContent = srcSelect.options[srcSelect.selectedIndex]?.text ?? '';
+            if (tgtChip && tgtSelect) tgtChip.textContent = tgtSelect.options[tgtSelect.selectedIndex]?.text ?? '';
         } else {
             if (nextNoGaps) nextNoGaps.style.display = '';
             if (nextHasGaps) nextHasGaps.style.display = 'none';
@@ -1331,6 +1419,48 @@ function exportCoverageExcel() {
     const tgtId = document.getElementById('target-fw').value;
     if (!srcId || !tgtId) return;
     window.open(`${API}/api/coverage/export?source=${srcId}&target=${tgtId}`, '_blank');
+}
+
+// ---------------------------------------------------------------------------
+// File → Textarea extraction (PDF / DOCX / TXT)
+// ---------------------------------------------------------------------------
+
+function initFileUploads() {
+    document.querySelectorAll('.file-input-hidden').forEach(input => {
+        input.addEventListener('change', async () => {
+            const file = input.files[0];
+            if (!file) return;
+
+            const targetId = input.dataset.target;
+            const textarea = document.getElementById(targetId);
+            const nameEl = document.getElementById(`${targetId}-filename`);
+            if (!textarea) return;
+
+            const label = input.closest('.file-upload-btn');
+            if (label) label.classList.add('loading');
+            if (nameEl) nameEl.textContent = 'Extracting…';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const resp = await fetch('/api/extract-text', { method: 'POST', body: formData });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                    throw new Error(err.detail || resp.statusText);
+                }
+                const data = await resp.json();
+                textarea.value = data.text;
+                if (nameEl) nameEl.textContent = `${file.name} (${(data.chars / 1000).toFixed(1)}k chars)`;
+                showToast(`Loaded "${file.name}"`, 'success');
+            } catch (err) {
+                if (nameEl) nameEl.textContent = '';
+                showToast('File extraction failed: ' + err.message, 'error');
+            } finally {
+                if (label) label.classList.remove('loading');
+                input.value = '';
+            }
+        });
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,4 @@
-"""
-LLM provider registry — add new providers here.
+"""LLM provider registry — add new providers here.
 
 Each provider is a function that returns a client object (or None if not configured).
 The compliance checker dispatches reasoning calls based on client attributes.
@@ -11,6 +10,7 @@ To add a new provider:
 """
 
 import os
+import re
 from typing import Optional, Protocol
 
 
@@ -243,8 +243,6 @@ register_provider("bedrock", _bedrock_factory, _bedrock_reason, "_is_bedrock")
 # ---------------------------------------------------------------------------
 # Shared response parser
 # ---------------------------------------------------------------------------
-
-import re
 
 def _parse_response(content: str) -> dict:
     """Parse LLM response for judgment and explanation."""

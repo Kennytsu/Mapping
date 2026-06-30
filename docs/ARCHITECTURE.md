@@ -133,10 +133,11 @@ Seed data:
 | SBERT in-process | Simple, no extra service | GPU service or API (for throughput) |
 | Sync NLP in async routes | Works fine for 1 user | Wrap in `asyncio.to_thread()` or use Celery |
 | PostgreSQL for vectors | One database to manage | Consider Pinecone/Weaviate at scale |
-| Pre-seeded control lists | Known-correct data for demo | Parse from official PDFs |
+| Pre-seeded control lists | Known-correct data for demo | Parse from official PDFs (or use the Import tab) |
 | No auth | POC, single user | Add OAuth/OIDC before any real deployment |
 | No LLM response caching | Simpler code | Cache by (regulation_hash + process_hash) |
 | Single `app.py` for all routes | Fast iteration | Split into route modules by domain |
+| `controls.embedding` not in initial migration | Column added after first cut | Add a proper Alembic migration |
 
 ---
 
@@ -153,6 +154,10 @@ Write a function `(content: bytes, doc_type: str) -> ParseOutput`, then call `re
 Write a factory (returns client or None) and a reasoning function (takes prompt + client, returns judgment dict). Call `register_provider(...)`. The compliance checker dispatches to it automatically based on the marker attribute.
 
 This means devs can add support for new services (Azure OpenAI, Google Vertex, Anthropic direct, etc.) without modifying the compliance logic or API layer.
+
+### Text extraction from uploaded files (`/api/extract-text`)
+
+Accepts `.pdf`, `.docx`, or `.txt` and returns plain text. Used by the frontend to populate policy/regulation textareas from uploaded files. Stateless — no DB writes. Uses `pdfplumber` for PDF and `python-docx` for Word.
 
 ---
 

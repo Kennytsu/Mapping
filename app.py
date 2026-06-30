@@ -1749,6 +1749,58 @@ async def suggest_mappings(
 
 
 # ---------------------------------------------------------------------------
+# Text Extraction (PDF / DOCX / TXT upload)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/extract-text")
+async def extract_text(file: UploadFile = File(...)):
+    """Extract plain text from an uploaded PDF, DOCX, or TXT file.
+
+    Returns ``{"text": "..."}`` so the frontend can populate a textarea.
+    Keeps the endpoint simple and stateless — no DB writes.
+    """
+    filename = (file.filename or "").lower()
+    content = await file.read()
+
+    if filename.endswith(".txt"):
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            text = content.decode("latin-1")
+
+    elif filename.endswith(".pdf"):
+        import io
+        import pdfplumber
+        text_parts = []
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+        text = "\n\n".join(text_parts)
+
+    elif filename.endswith(".docx"):
+        import io
+        try:
+            from docx import Document as DocxDocument
+        except ImportError:
+            raise HTTPException(status_code=500, detail="python-docx not installed")
+        doc = DocxDocument(io.BytesIO(content))
+        text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+    else:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{file.filename}'. Upload a .pdf, .docx, or .txt file.",
+        )
+
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="No readable text found in the file.")
+
+    return {"text": text.strip(), "filename": file.filename, "chars": len(text)}
+
+
+# ---------------------------------------------------------------------------
 # Policy Gap Check
 # ---------------------------------------------------------------------------
 

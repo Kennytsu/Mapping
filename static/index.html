@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=14">
+    <link rel="stylesheet" href="/static/style.css?v=18">
 </head>
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -48,17 +48,13 @@
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
                 Coverage
             </button>
-            <button class="tab" data-tab="mappings" role="tab" id="tab-mappings" aria-selected="false" aria-controls="mappings">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 000 2h8a1 1 0 100-2H3z"/></svg>
-                Mappings
+            <button class="tab" data-tab="ai-mapping" role="tab" id="tab-ai-mapping" aria-selected="false" aria-controls="ai-mapping">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-1a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v1h-3zM4.75 14.094A5.973 5.973 0 004 17v1H1v-1a3 3 0 013.75-2.906z"/></svg>
+                AI Mapping
             </button>
             <button class="tab" data-tab="upload" role="tab" id="tab-upload" aria-selected="false" aria-controls="upload">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"/></svg>
                 Import
-            </button>
-            <button class="tab" data-tab="ai-mapping" role="tab" id="tab-ai-mapping" aria-selected="false" aria-controls="ai-mapping">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v1h8v-1zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-1a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v1h-3zM4.75 14.094A5.973 5.973 0 004 17v1H1v-1a3 3 0 013.75-2.906z"/></svg>
-                AI Mapping
             </button>
         </nav>
 
@@ -67,7 +63,7 @@
             <section id="lookup" class="tab-panel active" role="tabpanel" aria-labelledby="tab-lookup">
                 <div class="panel-header">
                     <h2>Control Lookup</h2>
-                    <p>Search controls across all frameworks and explore their mappings.</p>
+                    <p>Search any control by ID or keyword and see all existing mappings to other frameworks.</p>
                 </div>
 
                 <div class="search-bar">
@@ -116,7 +112,7 @@
             <section id="coverage" class="tab-panel" role="tabpanel" aria-labelledby="tab-coverage">
                 <div class="panel-header">
                     <h2>Coverage Analysis</h2>
-                    <p>Compare two frameworks to see mapping coverage and identify gaps.</p>
+                    <p>Pick two frameworks, run analysis to see how many controls are mapped, find gaps, generate AI mappings, and check your existing policies against unmapped controls — all in one place.</p>
                 </div>
 
                 <div class="controls-row">
@@ -151,14 +147,27 @@
                             <button class="wf-link btn-link" data-tab="mappings">View Mappings →</button>
                         </div>
                         <div id="coverage-next-has-gaps" style="display:none;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
                                 <span id="gap-count-badge" class="count-badge accent-amber"></span>
-                                <strong>unmapped controls.</strong> Fix them:
+                                <strong>unmapped controls found.</strong>
                             </div>
-                            <div class="gap-action-btns">
-                                <button class="btn-primary wf-link" data-tab="ai-mapping">Generate AI Mappings →</button>
-                                <span class="gap-action-or">or</span>
-                                <button class="btn-secondary wf-link" data-tab="mappings">Edit mappings manually →</button>
+                            <!-- Inline AI mapping — no tab switch needed -->
+                            <div class="inline-ai-map">
+                                <p class="inline-ai-map-label">Generate AI mappings for these gaps:</p>
+                                <div class="inline-ai-map-row">
+                                    <span class="inline-map-fw-label">Source:</span>
+                                    <span id="inline-src-name" class="inline-fw-chip"></span>
+                                    <span class="inline-map-arrow">→</span>
+                                    <span class="inline-map-fw-label">Target:</span>
+                                    <span id="inline-tgt-name" class="inline-fw-chip"></span>
+                                    <label class="inline-threshold-label">Min. confidence
+                                        <input type="range" id="inline-threshold" min="0.3" max="0.9" step="0.05" value="0.5">
+                                        <span id="inline-threshold-val">0.50</span>
+                                    </label>
+                                    <button id="inline-ai-map-btn" class="btn-primary">Generate Mappings</button>
+                                    <span id="inline-ai-map-timer" class="operation-timer" style="display:none;"></span>
+                                </div>
+                                <div id="inline-ai-map-status" class="status hidden" aria-live="polite"></div>
                             </div>
                         </div>
                     </div>
@@ -172,6 +181,14 @@
                         <p class="card-description">Paste your security policy or internal process documentation. The tool will check which unmapped controls might already be addressed by your existing policies — before you add a formal mapping.</p>
                         <div class="field">
                             <label for="policy-text">Policy / Process Document</label>
+                            <div class="textarea-upload-row">
+                                <label class="file-upload-btn" title="Upload PDF, DOCX, or TXT">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"/></svg>
+                                    Upload file
+                                    <input type="file" accept=".pdf,.docx,.txt" class="file-input-hidden" data-target="policy-text">
+                                </label>
+                                <span class="file-upload-name" id="policy-text-filename"></span>
+                            </div>
                             <textarea id="policy-text" rows="6" placeholder="Paste your information security policy, privacy policy, SOC 2 description, or vendor DPA here..."></textarea>
                         </div>
                         <div style="display:flex;gap:10px;align-items:center;margin-top:12px;">
@@ -204,46 +221,41 @@
                             </div>
                         </div>
                     </details>
+
+                    <!-- Full mapping table — part of coverage, not a separate tab -->
+                    <div class="card" id="mapping-table-card" style="display:none;">
+                        <div class="card-header-row">
+                            <h3>Mapping Table <span id="table-row-count" class="count-badge"></span></h3>
+                            <div class="btn-group">
+                                <button id="export-csv-btn" class="btn-secondary">Export CSV</button>
+                                <button id="export-xlsx-btn" class="btn-secondary">Export Excel</button>
+                            </div>
+                        </div>
+                        <div class="table-toolbar">
+                            <div class="search-field table-search">
+                                <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
+                                <input type="text" id="table-search-input" placeholder="Filter by control ID or title">
+                            </div>
+                            <div class="filter-chips" id="table-filter-chips">
+                                <button class="chip active" data-filter="all">All</button>
+                                <button class="chip" data-filter="mapped">Mapped</button>
+                                <button class="chip" data-filter="gap">Gaps</button>
+                                <button class="chip" data-filter="strong">Strong</button>
+                                <button class="chip" data-filter="partial">Partial</button>
+                                <button class="chip" data-filter="weak">Weak</button>
+                            </div>
+                        </div>
+                        <div id="mapping-table-container" class="table-wrap"></div>
+                    </div>
                 </div>
             </section>
 
             <!-- Mappings table -->
-            <section id="mappings" class="tab-panel" role="tabpanel" aria-labelledby="tab-mappings">
-                <div class="panel-header">
-                    <h2>Mappings</h2>
-                    <p>Browse, filter, and export every control mapping. Run a <button class="btn-link wf-link" data-tab="coverage">Coverage Analysis</button> first to populate this table.</p>
-                </div>
-                <div class="card">
-                    <div class="card-header-row">
-                        <h3>Mapping Table <span id="table-row-count" class="count-badge"></span></h3>
-                        <div class="btn-group">
-                            <button id="export-csv-btn" class="btn-secondary">Export CSV</button>
-                            <button id="export-xlsx-btn" class="btn-secondary">Export Excel</button>
-                        </div>
-                    </div>
-                    <div class="table-toolbar">
-                        <div class="search-field table-search">
-                            <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/></svg>
-                            <input type="text" id="table-search-input" placeholder="Filter by control ID or title">
-                        </div>
-                        <div class="filter-chips" id="table-filter-chips">
-                            <button class="chip active" data-filter="all">All</button>
-                            <button class="chip" data-filter="mapped">Mapped</button>
-                            <button class="chip" data-filter="gap">Gaps</button>
-                            <button class="chip" data-filter="strong">Strong</button>
-                            <button class="chip" data-filter="partial">Partial</button>
-                            <button class="chip" data-filter="weak">Weak</button>
-                        </div>
-                    </div>
-                    <div id="mapping-table-container" class="table-wrap"></div>
-                </div>
-            </section>
-
             <!-- Import official mapping document -->
             <section id="upload" class="tab-panel" role="tabpanel" aria-labelledby="tab-upload">
                 <div class="panel-header">
                     <h2>Import</h2>
-                    <p>Add controls and mappings from an official document. Use this to load BSI IT-Grundschutz modules, C5 criteria, or any CSV/Excel mapping table into the database — then run AI Mapping or Coverage Analysis on them.</p>
+                    <p>Load a new framework into the database. Upload an official BSI, C5, or CSV document to extract controls and mappings — these then become available in Coverage and Lookup.</p>
                 </div>
 
                 <div class="upload-layout">
@@ -345,7 +357,7 @@
             <section id="ai-mapping" class="tab-panel" role="tabpanel" aria-labelledby="tab-ai-mapping">
                 <div class="panel-header">
                     <h2>AI Mapping</h2>
-                    <p>Let the AI propose mappings between two frameworks or two regulation texts.</p>
+                    <p>Advanced: manually trigger AI mapping between two frameworks or paste raw regulation text to extract mappings. For the standard flow, use the Generate Mappings button on the Coverage tab instead.</p>
                 </div>
 
                 <!-- Path chooser -->
@@ -366,7 +378,7 @@
                 <div id="path-fw-content">
                     <div class="card">
                         <h3>Generate Mappings Between Frameworks</h3>
-                        <p class="card-description">Compares every control pair using SBERT similarity. Top matches are saved as <code>ai_suggested</code> mappings you can review in the Mappings tab.</p>
+                        <p class="card-description">Compares every control in the source framework against every control in the target using AI similarity scoring. Matches above the threshold are saved as proposed mappings. You can then run Coverage to see how much the gap closed.</p>
                         <div class="field-row">
                             <div class="field">
                                 <label for="fw-map-source">Source Framework</label>
@@ -394,17 +406,23 @@
                             <h3>Results</h3>
                             <div id="fw-map-summary-chips" style="display:flex;gap:8px;"></div>
                         </div>
-                        <p class="card-description">Saved. Go to <button class="wf-link" data-tab="mappings">Mappings</button> to review and accept/reject each one.</p>
+                        <p class="card-description">Saved. Go to <button class="wf-link btn-link" data-tab="coverage">Coverage</button> to re-run analysis and see how much the gap closed.</p>
                         <div id="fw-map-preview" class="check-results"></div>
                     </div>
                 </div>
 
                 <!-- Path B: Regulation text (hidden by default) -->
                 <div id="path-text-content" style="display:none;">
+                    <div class="ai-map-explainer card">
+                        <strong>When to use this</strong>
+                        <p>Use this path when you have a regulation that hasn't been broken into numbered controls yet — for example, a new law, an internal policy annex, or a draft standard. Paste the raw text and the tool will extract the actual obligations ("shall", "must", "is required to") from it, then find matches between two documents.</p>
+                        <p style="margin-top:8px;"><strong>Step 1:</strong> Save both regulation texts (left column). <strong>Step 2:</strong> Pick them as Source and Target, then click Generate Mappings (right column).</p>
+                    </div>
                     <div class="compliance-grid">
                         <div class="compliance-col">
                             <div class="card">
-                                <h3>Save Regulation Text</h3>
+                                <h3>Step 1 — Save Regulation Text</h3>
+                                <p class="card-description">Paste the full text of a regulation or annex. You need to save at least two before you can map between them.</p>
                                 <div class="field">
                                     <label for="reg-name">Name</label>
                                     <input type="text" id="reg-name" placeholder="e.g. General Data Protection Regulation">
@@ -421,6 +439,14 @@
                                 </div>
                                 <div class="field">
                                     <label for="reg-text">Regulation Text</label>
+                                    <div class="textarea-upload-row">
+                                        <label class="file-upload-btn" title="Upload PDF, DOCX, or TXT">
+                                            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z"/></svg>
+                                            Upload file
+                                            <input type="file" accept=".pdf,.docx,.txt" class="file-input-hidden" data-target="reg-text">
+                                        </label>
+                                        <span class="file-upload-name" id="reg-text-filename"></span>
+                                    </div>
                                     <textarea id="reg-text" rows="8" placeholder="Paste the full regulation or annex text here..."></textarea>
                                     <div class="demo-examples">
                                         <button type="button" class="demo-example-btn" id="demo-reg-gdpr">
@@ -434,13 +460,14 @@
                             </div>
                             <div class="card">
                                 <h3>Saved Regulations</h3>
-                                <div id="reg-list" class="reg-list"><p class="muted">None yet.</p></div>
+                                <p class="card-description">Regulations saved here are available in the Source / Target dropdowns on the right.</p>
+                                <div id="reg-list" class="reg-list"><p class="muted">No regulations uploaded yet.</p></div>
                             </div>
                         </div>
                         <div class="compliance-col">
                             <div class="card">
-                                <h3>Generate Mappings from Text</h3>
-                                <p class="card-description">Extracts deontic propositions from both regulation texts, builds eventic graphs, then finds semantically matching obligations.</p>
+                                <h3>Step 2 — Generate Mappings from Text</h3>
+                                <p class="card-description">Pick two saved regulations. The tool extracts the obligations from each text and finds semantically matching pairs — these are saved as <code>ai_suggested</code> mappings you can review in Coverage.</p>
                                 <div class="field-row">
                                     <div class="field">
                                         <label for="map-source-reg">Source</label>
@@ -573,6 +600,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=20"></script>
+    <script src="/static/app.js?v=24"></script>
 </body>
 </html>

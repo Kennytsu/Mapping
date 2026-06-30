@@ -1,4 +1,27 @@
-"""Database setup with SQLAlchemy async engine for PostgreSQL."""
+"""Database setup with SQLAlchemy async engine for PostgreSQL.
+
+Models
+------
+Framework       Security framework (ISO 27001, BSI IT-Grundschutz, C5, …)
+Control         Individual control within a framework, with optional vector embedding
+Mapping         Link between two controls — official, manual, or AI-suggested
+VersionChange   Tracks control changes between framework versions
+RegulationDocument  Full regulation text for the ARC/RAG compliance pipeline
+ArcTuple        Structured obligation/definition/right extracted from a regulation
+EventicGraphNode / EventicGraphEdge  Eventic knowledge graph from dynamic layer
+TermDefinition  Term-definition pairs extracted by the static layer
+BusinessProcessDocument / BusinessProcessChunk  Business process text + SBERT chunks
+ComplianceCheck Result of a compliance reasoning run
+
+Fresh-install note
+------------------
+The `controls.embedding` column is added in `database.py` but was not included in
+the original Alembic migration (001_compliance_tables.py). On a fresh PostgreSQL
+volume, run the following once after first startup:
+
+    docker exec <app-container> psql -U compliance -d compliance_mapping \\
+        -c "ALTER TABLE controls ADD COLUMN IF NOT EXISTS embedding vector(768);"
+"""
 
 import os
 from datetime import datetime, timezone

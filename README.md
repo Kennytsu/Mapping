@@ -4,7 +4,7 @@ Maps security controls between ISO 27001, BSI IT-Grundschutz, and C5. Uses NLP t
 
 ## Setup
 
-You need Docker Desktop running. That's it.
+You need Docker Desktop (or Podman) running. That's it.
 
 ```bash
 docker-compose up --build
@@ -14,6 +14,13 @@ docker exec mapping-app-1 python seed_c5_demo.py
 ```
 
 Open http://localhost:8001.
+
+> **Note — fresh database only.** The `controls.embedding` column was added after the initial migration. If you see a `column controls.embedding does not exist` error, run this once:
+> ```bash
+> docker exec mapping-db-1 psql -U compliance -d compliance_mapping \
+>     -c "ALTER TABLE controls ADD COLUMN IF NOT EXISTS embedding vector(768);"
+> ```
+> This only happens on a brand-new volume; existing databases already have the column.
 
 ## What does this thing actually do?
 
@@ -105,18 +112,20 @@ python -m pytest tests/ -x -q
 - NLP runs synchronously — fine for one user, will block under load.
 - No caching of LLM responses (same check = same cost every time).
 - Document parser handles specific formats (BSI Zuordnungstabelle PDF, C5 criteria PDF, BSI IT-Grundschutz module PDF, structured Excel). It won't magically parse any random PDF.
+- `controls.embedding` is not in the initial Alembic migration — see the setup note above for the one-time fix on fresh installs.
 
 ## UI structure
 
-The frontend has five tabs:
+The frontend has four tabs:
 
 | Tab | What it does |
 |-----|-------------|
 | **Lookup** | Search any control by ID/title, view its description and existing mappings |
-| **Coverage** | Pick two frameworks → shows mapping coverage %, gaps, and next-step actions |
-| **Mappings** | Full mapping table with sort/filter/export — populated after a coverage analysis |
+| **Coverage** | Pick two frameworks → shows coverage %, gaps, inline AI mapping, and policy check |
+| **AI Mapping** | Advanced: generate mappings from raw regulation text using the ARC pipeline |
 | **Import** | Upload official docs (BSI PDFs, Excel, CSV) to add controls and mappings to the DB |
-| **AI Mapping** | Generate new mappings: either between existing frameworks (SBERT) or from raw regulation text (ARC pipeline) |
+
+The full mapping table with filter/export lives inside the Coverage tab (shown after running analysis).
 
 ## Adding stuff
 

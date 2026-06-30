@@ -371,13 +371,7 @@ def _reason_with_llm(prompt: str, llm_client) -> dict:
         if reason_fn:
             return reason_fn(prompt, llm_client)
 
-        # Legacy dispatch for clients with old-style markers
-        if hasattr(llm_client, "_watsonx_model"):
-            return _reason_with_watsonx(prompt, llm_client)
-        if hasattr(llm_client, "_bedrock_model"):
-            return _reason_with_bedrock(prompt, llm_client)
-
-        # Fallback: OpenAI-compatible client
+        # Fallback: OpenAI-compatible client (no marker attribute set)
         response = llm_client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
@@ -389,52 +383,12 @@ def _reason_with_llm(prompt: str, llm_client) -> dict:
         return {"judgment": "undetermined", "explanation": f"LLM error: {str(e)}"}
 
 
-def _reason_with_watsonx(prompt: str, watsonx_client) -> dict:
-    """Legacy: Use IBM watsonx.ai. Prefer llm_providers registry instead."""
-    try:
-        from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
-        from ibm_watsonx_ai.foundation_models.utils.enums import DecodingMethods
-
-        params = {
-            GenParams.DECODING_METHOD: DecodingMethods.GREEDY,
-            GenParams.MAX_NEW_TOKENS: 500,
-            GenParams.TEMPERATURE: 0.1,
-            GenParams.STOP_SEQUENCES: ["\n\n\n"],
-        }
-
-        content = watsonx_client.generate_text(prompt=prompt, params=params)
-        return _parse_compliance_response(content)
-    except Exception as e:
-        return {"judgment": "undetermined", "explanation": f"watsonx error: {str(e)}"}
-
-
-def _reason_with_bedrock(prompt: str, bedrock_client) -> dict:
-    """Legacy: Use AWS Bedrock. Prefer llm_providers registry instead."""
-    import json
-
-    try:
-        model_id = getattr(bedrock_client, "_bedrock_model_id", "anthropic.claude-sonnet-4-6")
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 500,
-            "temperature": 0.1,
-            "messages": [{"role": "user", "content": prompt}],
-        })
-        response = bedrock_client.invoke_model(
-            modelId=model_id,
-            body=body,
-            contentType="application/json",
-            accept="application/json",
-        )
-        result = json.loads(response["body"].read())
-        content = result["content"][0]["text"]
-        return _parse_compliance_response(content)
-    except Exception as e:
-        return {"judgment": "undetermined", "explanation": f"Bedrock error: {str(e)}"}
-
-
 def _parse_compliance_response(content: str) -> dict:
-    """Parse LLM response for judgment and explanation."""
+    """Parse LLM response for judgment and explanation.
+
+    Mirrors llm_providers._parse_response — kept local so compliance_checker
+    can be used independently without importing the provider registry.
+    """
     judgment = "undetermined"
     explanation = content
 
