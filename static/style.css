@@ -709,6 +709,17 @@ select:focus, input:focus, textarea:focus {
 }
 .ai-map-explainer strong { display: block; font-size: 13px; margin-bottom: 8px; color: var(--text-1); }
 .ai-map-explainer p { font-size: 13px; color: var(--text-2); margin: 0; line-height: 1.6; }
+
+/* Description quality warning */
+.desc-quality-warning {
+  display: flex; gap: 10px; align-items: flex-start;
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: var(--r-sm);
+  font-size: 12px; color: var(--text-1); line-height: 1.6;
+}
 .compliance-col { display: flex; flex-direction: column; gap: 16px; }
 .reg-list { max-height: 200px; overflow-y: auto; }
 .reg-item {

@@ -295,7 +295,6 @@ function populateFrameworkSelects() {
         'fw-map-target': false,
     };
 
-    // selects that need a blank "choose" first option
     const withBlank = new Set(['source-fw', 'target-fw', 'upload-source-fw', 'upload-target-fw', 'mm-target-fw', 'fw-map-source', 'fw-map-target']);
 
     for (const [id, addAll] of Object.entries(selects)) {
@@ -313,6 +312,62 @@ function populateFrameworkSelects() {
         });
         if (current) el.value = current;
     }
+
+    // Attach description-quality warning listeners to the coverage and AI mapping selects
+    _attachDescWarning(['source-fw', 'target-fw'], 'desc-quality-warning');
+    _attachDescWarning(['fw-map-source', 'fw-map-target'], 'fw-map-desc-warning');
+}
+
+
+// Description-quality warning — fires when a framework select changes
+const _descStatsCache = {};
+
+async function _checkDescQuality(frameworkId) {
+    if (!frameworkId) return null;
+    if (_descStatsCache[frameworkId]) return _descStatsCache[frameworkId];
+    try {
+        const res = await fetch(`${API}/api/frameworks/${frameworkId}/description-stats`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        _descStatsCache[frameworkId] = data;
+        return data;
+    } catch { return null; }
+}
+
+function _attachDescWarning(selectIds, warningElId) {
+    selectIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', () => _updateDescWarning(selectIds, warningElId));
+    });
+}
+
+async function _updateDescWarning(selectIds, warningElId) {
+    const warningEl = document.getElementById(warningElId);
+    if (!warningEl) return;
+
+    const ids = selectIds.map(id => document.getElementById(id)?.value).filter(Boolean);
+    if (!ids.length) { warningEl.style.display = 'none'; return; }
+
+    const stats = await Promise.all(ids.map(_checkDescQuality));
+    const sparse = stats.filter(s => s && s.description_coverage_pct < 60 && s.total_controls > 0);
+
+    if (!sparse.length) { warningEl.style.display = 'none'; return; }
+
+    const fw = (id) => frameworksCache.find(f => f.id === parseInt(id));
+    const lines = sparse.map(s => {
+        const name = fw(s.framework_id)?.short_name ?? `Framework ${s.framework_id}`;
+        return `<strong>${name}</strong>: only ${s.description_coverage_pct}% of controls have descriptions`;
+    });
+
+    warningEl.innerHTML = `
+        <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15" style="flex-shrink:0;margin-top:1px;color:#b45309"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        <div>
+            <strong>AI mapping accuracy may be lower</strong><br>
+            ${lines.join('<br>')}.<br>
+            <span style="color:var(--text-3)">Richer descriptions → better matches. Enrich controls via the Import tab or by uploading the full framework PDF.</span>
+        </div>`;
+    warningEl.style.display = 'flex';
 }
 
 // ---------------------------------------------------------------------------

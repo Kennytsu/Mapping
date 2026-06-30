@@ -273,6 +273,39 @@ async def create_framework(
     )
 
 
+@app.get("/api/frameworks/{framework_id}/description-stats")
+async def framework_description_stats(
+    framework_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """Return description completeness stats for a framework.
+
+    Used by the frontend to warn users when controls lack descriptions,
+    which degrades AI mapping accuracy.
+    """
+    total = (await session.execute(
+        select(func.count(Control.id)).where(Control.framework_id == framework_id)
+    )).scalar_one()
+
+    with_desc = (await session.execute(
+        select(func.count(Control.id)).where(
+            Control.framework_id == framework_id,
+            Control.description != "",
+            Control.description.isnot(None),
+            func.length(Control.description) > 20,
+        )
+    )).scalar_one()
+
+    pct = round(with_desc / total * 100) if total else 0
+    return {
+        "framework_id": framework_id,
+        "total_controls": total,
+        "controls_with_description": with_desc,
+        "controls_without_description": total - with_desc,
+        "description_coverage_pct": pct,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Controls
 # ---------------------------------------------------------------------------
